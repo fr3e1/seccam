@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SecCam — iPhone Setup</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="setup-container">
+    <div class="card setup-card">
+      <div class="card-body">
+        <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">iPhone Camera Setup</h1>
+        <p style="color: var(--muted); margin-bottom: 24px;">Follow these steps to use your iPhone as a SecCam camera.</p>
+
+        <div class="setup-step">
+          <div class="setup-step-header">
+            <span class="setup-step-number">1</span>
+            <h3 class="setup-step-title">Download the CA Certificate</h3>
+          </div>
+          <div class="setup-step-body">
+            Open this link in <strong>Safari</strong> on your iPhone:
+            <div class="setup-links" style="margin-top: 8px;">
+              <a class="btn btn-primary" href="/ca.crt" download="seccam-ca.crt">Download Certificate</a>
+              <a class="btn btn-ghost" id="caLink" href="/ca.crt" target="_blank" rel="noopener">Open /ca.crt</a>
+            </div>
+            <p style="margin-top: 8px;">Tap <strong>Allow</strong> when prompted to download the profile.</p>
+          </div>
+        </div>
+
+        <div class="setup-step">
+          <div class="setup-step-header">
+            <span class="setup-step-number">2</span>
+            <h3 class="setup-step-title">Install the Profile</h3>
+          </div>
+          <div class="setup-step-body">
+            Go to <code>Settings → General → VPN &amp; Device Management</code> (or <code>Profiles</code> on older iOS).
+            Tap the downloaded <strong>SecCam Local CA</strong> profile and install it.
+          </div>
+        </div>
+
+        <div class="setup-step">
+          <div class="setup-step-header">
+            <span class="setup-step-number">3</span>
+            <h3 class="setup-step-title">Enable Full Trust</h3>
+          </div>
+          <div class="setup-step-body">
+            Go to <code>Settings → General → About → Certificate Trust Settings</code>.
+            Under <strong>ENABLE FULL TRUST FOR ROOT CERTIFICATES</strong>, turn on <strong>SecCam Local CA</strong>.
+          </div>
+        </div>
+
+        <div class="setup-step">
+          <div class="setup-step-header">
+            <span class="setup-step-number">4</span>
+            <h3 class="setup-step-title">Open the Camera Page</h3>
+          </div>
+          <div class="setup-step-body">
+            In Safari, open:
+            <div class="setup-links" style="margin-top: 8px;">
+              <a class="btn btn-primary" id="cameraLink" href="/camera" target="_blank" rel="noopener">Open Camera Page</a>
+            </div>
+            <p style="margin-top: 8px;">The URL is <code id="cameraUrl"></code> — it uses your current hostname.</p>
+          </div>
+        </div>
+
+        <div class="setup-note">
+          <strong>Desktop viewers:</strong> If you open the camera or dashboard in a desktop browser, you'll see a certificate warning.
+          Either install and trust the <code>SecCam Local CA</code> certificate in your OS/browser, or accept the warning to proceed.
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      const host = location.hostname;
+      const protocol = location.protocol === 'https:' ? 'https:' : 'http:';
+      const port = location.port ? ':' + location.port : '';
+      const base = protocol + '//' + host + port;
+
+      const caLink = document.getElementById('caLink');
+      const cameraLink = document.getElementById('cameraLink');
+      const cameraUrl = document.getElementById('cameraUrl');
+
+      caLink.href = base + '/ca.crt';
+      cameraLink.href = base + '/camera';
+      cameraUrl.textContent = base + '/camera';
+    })();
+  </script>
+</body>
+</html>

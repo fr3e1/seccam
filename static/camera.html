@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SecCam — Camera</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="/static/vendor/tf.min.js"></script>
+  <script defer src="/static/vendor/coco-ssd.min.js"></script>
+  <script defer src="/static/camera.js"></script>
+  <style>
+    .camera-page { display: flex; flex-direction: column; height: 100vh; background: var(--bg); color: var(--text); }
+    .camera-page header { position: sticky; top: 0; z-index: 10; background: rgba(13,17,23,0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 8px 12px; }
+    .hud { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+    .hud-item { display: flex; align-items: center; gap: 6px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+    .status-dot.connected { background: var(--ok); }
+    .status-dot.connecting { background: var(--warn); }
+    .mode-badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--panel); border: 1px solid var(--border); }
+    .mode-badge.local { border-color: var(--ok); color: var(--ok); }
+    .mode-badge.server { border-color: var(--accent); color: var(--accent); }
+    .mode-badge.starting { border-color: var(--warn); color: var(--warn); }
+    .fps-counter { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+    .labels-chip { display: flex; flex-wrap: wrap; gap: 4px; max-width: 300px; }
+    .label-chip { padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 600; background: var(--panel); border: 1px solid var(--border); }
+    .label-chip.person { border-color: #f85149; color: #f85149; }
+    .label-chip.vehicle { border-color: #2f81f7; color: #2f81f7; }
+    .label-chip.animal { border-color: #3fb950; color: #3fb950; }
+    .label-chip.other { border-color: #d29922; color: #d29922; }
+
+    .viewfinder { flex: 1; position: relative; overflow: hidden; background: #000; touch-action: none; }
+    .viewfinder video, .viewfinder canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 100%; max-height: 100%; object-fit: contain; }
+    .viewfinder video { z-index: 1; }
+    .viewfinder canvas.overlay { z-index: 2; pointer-events: none; }
+    .viewfinder .dim-overlay { position: absolute; inset: 0; background: #000; z-index: 10; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    .viewfinder .dim-overlay.active { opacity: 1; pointer-events: auto; }
+
+    .setup-card, .warning-card, .error-card { margin: 16px; padding: 16px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); }
+    .warning-card { border-color: var(--warn); background: rgba(210,153,34,0.1); }
+    .warning-card a { color: var(--accent); text-decoration: underline; }
+    .error-card { border-color: var(--danger); background: rgba(248,81,73,0.1); display: none; }
+    .error-card.visible { display: block; }
+    .setup-card h2 { margin: 0 0 12px; font-size: 18px; }
+    .setup-card .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .setup-card label { font-size: 13px; color: var(--muted); }
+    .setup-card input { padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 16px; }
+    .setup-card .btn-primary { width: 100%; padding: 16px; font-size: 18px; font-weight: 600; border-radius: 10px; background: var(--accent); color: white; border: none; }
+    .setup-card .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .setup-card .hint { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
+
+    .controls { display: flex; gap: 8px; padding: 12px; background: rgba(13,17,23,0.9); backdrop-filter: blur(8px); border-top: 1px solid var(--border); }
+    .controls button { flex: 1; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; border: none; background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+    .controls button:active { background: var(--border); }
+    .controls button.danger { background: var(--danger); color: white; border-color: var(--danger); }
+    .controls button.dim-active { background: var(--ok); color: white; border-color: var(--ok); }
+
+    .toast-container { position: fixed; bottom: 16px; right: 16px; z-index: 100; pointer-events: none; }
+    .toast { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; margin-top: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.3s; pointer-events: auto; }
+    .toast.show { opacity: 1; }
+
+    .hidden { display: none !important; }
+    @media (max-width: 375px) {
+      .hud { gap: 8px; font-size: 11px; }
+      .labels-chip { max-width: 200px; }
+      .controls button { padding: 10px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="camera-page">
+    <header>
+      <div class="hud">
+        <div class="hud-item"><span class="status-dot" id="statusDot"></span><span id="statusText">Disconnected</span></div>
+        <span class="mode-badge starting" id="modeBadge">Starting…</span>
+        <div class="hud-item"><span class="fps-counter" id="fpsCounter">— fps</span></div>
+        <div class="hud-item"><span class="fps-counter" id="inferCounter">— ms</span></div>
+        <div class="labels-chip hud-item" id="labelsChip"></div>
+      </div>
+    </header>
+
+    <main class="viewfinder" id="viewfinder">
+      <video id="video" playsinline muted autoplay aria-hidden="true"></video>
+      <canvas class="overlay" id="overlay" aria-hidden="true"></canvas>
+      <div class="dim-overlay" id="dimOverlay" aria-hidden="true">Screen dimmed — tap to wake</div>
+    </main>
+
+    <div class="setup-card hidden" id="setupCard">
+      <h2>Camera Setup</h2>
+      <div class="field">
+        <label for="cameraName">Camera name</label>
+        <input type="text" id="cameraName" maxlength="32" placeholder="Front door">
+      </div>
+      <button class="btn-primary" id="startBtn">Start Camera</button>
+      <p class="hint" id="wakeLockHint"></p>
+    </div>
+
+    <div class="warning-card hidden" id="warningCard">
+      <strong>Insecure context</strong> — Camera and secure WebSockets require HTTPS.
+      <br><a href="/setup">Install the certificate first</a> or access via HTTPS.
+    </div>
+
+    <div class="error-card" id="errorCard"></div>
+
+    <div class="controls hidden" id="controls">
+      <button id="dimBtn" type="button">Dim</button>
+      <button id="switchBtn" type="button">Switch camera</button>
+      <button id="stopBtn" class="danger" type="button">Stop</button>
+    </div>
+  </div>
+  <div class="toast-container" id="toastContainer"></div>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SecCam — Welcome</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="welcome-container">
+    <div class="card welcome-card">
+      <div class="card-body">
+        <div class="welcome-progress" role="progressbar" aria-valuenow="1" aria-valuemin="1" aria-valuemax="4" aria-label="Setup progress">
+          <div class="progress-dots">
+            <span class="progress-dot active" data-step="1" aria-hidden="true"></span>
+            <span class="progress-dot" data-step="2" aria-hidden="true"></span>
+            <span class="progress-dot" data-step="3" aria-hidden="true"></span>
+            <span class="progress-dot" data-step="4" aria-hidden="true"></span>
+          </div>
+          <div class="progress-labels">
+            <span class="active" data-step="1">Welcome</span>
+            <span data-step="2">PIN</span>
+            <span data-step="3">Preferences</span>
+            <span data-step="4">Done</span>
+          </div>
+        </div>
+
+        <div class="welcome-steps">
+          <!-- Step 1: Welcome -->
+          <section class="welcome-step active" data-step="1" aria-labelledby="step1-title">
+            <h2 id="step1-title" class="welcome-step-title">Welcome to SecCam</h2>
+            <p class="welcome-step-text">
+              SecCam turns your iPhone into a smart security camera. Object detection runs on the phone when possible
+              (using TensorFlow.js), keeping your video private. If the phone can't handle it, frames are securely
+              sent to your server for detection. View live feeds and events from any browser.
+            </p>
+            <p class="welcome-step-text">
+              This quick setup will take less than a minute. Let's get started.
+            </p>
+            <div class="welcome-step-actions">
+              <button class="btn btn-primary w-full" type="button" data-action="next">Get Started</button>
+            </div>
+          </section>
+
+          <!-- Step 2: PIN -->
+          <section class="welcome-step" data-step="2" aria-labelledby="step2-title" hidden>
+            <h2 id="step2-title" class="welcome-step-title">Choose a PIN</h2>
+            <p class="welcome-step-text">Your PIN protects the dashboard and camera pages. Use 4–12 digits.</p>
+            <form id="pinForm" novalidate>
+              <div class="field">
+                <label class="label" for="pin">PIN</label>
+                <div class="input-wrapper">
+                  <input class="input" type="password" id="pin" name="pin" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" required aria-describedby="pinError">
+                  <button class="btn btn-ghost btn-sm toggle-visibility" type="button" aria-label="Show PIN" aria-pressed="false">
+                    <svg class="icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="icon-eye-off hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  </button>
+                </div>
+                <div id="pinError" class="field-error" aria-live="polite"></div>
+                <div class="field-hint" id="pinHint">4–12 digits</div>
+              </div>
+              <div class="field">
+                <label class="label" for="pinConfirm">Confirm PIN</label>
+                <div class="input-wrapper">
+                  <input class="input" type="password" id="pinConfirm" name="pin_confirm" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" required aria-describedby="pinConfirmError">
+                  <button class="btn btn-ghost btn-sm toggle-visibility" type="button" aria-label="Show PIN" aria-pressed="false">
+                    <svg class="icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="icon-eye-off hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  </button>
+                </div>
+                <div id="pinConfirmError" class="field-error" aria-live="polite"></div>
+              </div>
+            </form>
+            <div class="welcome-step-actions">
+              <button class="btn btn-ghost" type="button" data-action="prev">Back</button>
+              <button class="btn btn-primary" type="button" data-action="next" id="pinNextBtn" disabled>Next</button>
+            </div>
+          </section>
+
+          <!-- Step 3: Preferences -->
+          <section class="welcome-step" data-step="3" aria-labelledby="step3-title" hidden>
+            <h2 id="step3-title" class="welcome-step-title">Preferences</h2>
+            <form id="prefsForm" novalidate>
+              <div class="field">
+                <label class="label" for="retention">Keep recordings for</label>
+                <select class="select" id="retention" name="retention_days">
+                  <option value="3">3 days</option>
+                  <option value="7">7 days</option>
+                  <option value="14" selected>14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+
+              <fieldset class="field">
+                <legend class="label">Detection mode</legend>
+                <div class="mode-options">
+                  <label class="mode-option">
+                    <input type="radio" name="mode" value="auto" checked>
+                    <div class="mode-option-title">Auto (recommended)</div>
+                    <div class="mode-option-desc">Phone tries local detection first, falls back to server if slow or unavailable.</div>
+                  </label>
+                  <label class="mode-option">
+                    <input type="radio" name="mode" value="local">
+                    <div class="mode-option-title">On-device</div>
+                    <div class="mode-option-desc">All detection runs on the phone using TensorFlow.js. Best privacy, uses phone battery.</div>
+                  </label>
+                  <label class="mode-option">
+                    <input type="radio" name="mode" value="server">
+                    <div class="mode-option-title">Server</div>
+                    <div class="mode-option-desc">Phone streams frames; detection runs on the server (YOLOX-Nano). Lower phone battery, higher latency.</div>
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset class="field">
+                <legend class="label">What to detect</legend>
+                <p class="welcome-step-text" style="margin-bottom: 12px;">Enable the categories you want alerts for.</p>
+                <div class="label-groups">
+                  <label class="label-group">
+                    <input type="checkbox" name="group_people" value="1" checked>
+                    <span class="label-group-label">
+                      <span class="label-color" style="background: var(--label-person)"></span>
+                      People
+                    </span>
+                    <span class="label-group-desc">person</span>
+                  </label>
+                  <label class="label-group">
+                    <input type="checkbox" name="group_vehicles" value="1" checked>
+                    <span class="label-group-label">
+                      <span class="label-color" style="background: var(--label-vehicle)"></span>
+                      Vehicles
+                    </span>
+                    <span class="label-group-desc">car, truck, bus, motorcycle, bicycle</span>
+                  </label>
+                  <label class="label-group">
+                    <input type="checkbox" name="group_animals" value="1" checked>
+                    <span class="label-group-label">
+                      <span class="label-color" style="background: var(--label-animal)"></span>
+                      Animals
+                    </span>
+                    <span class="label-group-desc">cat, dog, bird, horse, sheep, cow, bear</span>
+                  </label>
+                </div>
+              </fieldset>
+            </form>
+            <div class="welcome-step-actions">
+              <button class="btn btn-ghost" type="button" data-action="prev">Back</button>
+              <button class="btn btn-primary" type="button" data-action="next">Next</button>
+            </div>
+          </section>
+
+          <!-- Step 4: Done -->
+          <section class="welcome-step" data-step="4" aria-labelledby="step4-title" hidden>
+            <h2 id="step4-title" class="welcome-step-title">You're all set!</h2>
+            <p class="welcome-step-text">SecCam is ready. Here's what to do next:</p>
+            <div class="setup-note" style="margin-bottom: 24px;">
+              <strong>On your iPhone:</strong> Install the certificate, then open the camera page.
+            </div>
+            <div class="welcome-step-actions" style="flex-direction: column; gap: 12px;">
+              <a class="btn btn-primary w-full" href="/setup" target="_blank" rel="noopener">Camera Setup Guide</a>
+              <a class="btn btn-ghost w-full" href="/">Open Dashboard</a>
+            </div>
+          </section>
+        </div>
+
+        <div id="welcomeError" class="welcome-error hidden" role="alert" aria-live="assertive"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/static/welcome.js"></script>
+</body>
+</html>

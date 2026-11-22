@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SecCam — Login</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="card login-card">
+      <div class="card-body">
+        <div class="login-header">
+          <div class="login-logo">SecCam</div>
+          <div class="login-subtitle">Enter your PIN to continue</div>
+        </div>
+        <form id="loginForm" novalidate>
+          <div class="field">
+            <label class="label" for="pin">PIN</label>
+            <input class="input" type="password" id="pin" name="pin" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autofocus required aria-describedby="pinError">
+            <div id="pinError" class="sr-only" aria-live="polite"></div>
+          </div>
+          <button class="btn btn-primary w-full" type="submit" id="submitBtn">Sign in</button>
+        </form>
+        <div id="errorMsg" class="mt-16 text-center text-sm text-danger hidden" role="alert" aria-live="assertive"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      const form = document.getElementById('loginForm');
+      const pinInput = document.getElementById('pin');
+      const submitBtn = document.getElementById('submitBtn');
+      const errorMsg = document.getElementById('errorMsg');
+      const pinError = document.getElementById('pinError');
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const next = urlParams.get('next') || '/';
+
+      function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.classList.remove('hidden');
+        pinError.textContent = msg;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign in';
+      }
+
+      function hideError() {
+        errorMsg.classList.add('hidden');
+        pinError.textContent = '';
+      }
+
+      function isSafeNext(path) {
+        return path.startsWith('/') && !path.startsWith('//');
+      }
+
+      async function checkSetup() {
+        try {
+          const res = await fetch('/api/setup/status', { credentials: 'same-origin' });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.setup_required) {
+              window.location.href = '/welcome';
+              return false;
+            }
+          }
+        } catch (err) {
+          // If check fails, allow login to proceed (server will enforce)
+        }
+        return true;
+      }
+
+      checkSetup().then(allowed => {
+        if (!allowed) return;
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          hideError();
+          const pin = pinInput.value.trim();
+          if (!pin) {
+            showError('Please enter your PIN');
+            pinInput.focus();
+            return;
+          }
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Signing in…';
+          try {
+            const res = await fetch('/api/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ pin })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.ok) {
+              window.location.href = isSafeNext(next) ? next : '/';
+            } else if (res.status === 429) {
+              showError(data.detail || 'Too many attempts. Please wait a moment.');
+            } else if (res.status === 403) {
+              window.location.href = '/welcome';
+            } else if (res.status === 401) {
+              showError('Invalid PIN');
+              pinInput.value = '';
+              pinInput.focus();
+            } else {
+              showError(data.detail || 'Login failed. Please try again.');
+            }
+          } catch (err) {
+            showError('Network error. Please check your connection.');
+          }
+        });
+
+        pinInput.addEventListener('input', hideError);
+      });
+    })();
+  </script>
+</body>
+</html>

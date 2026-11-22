@@ -1,0 +1,38 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Data & runtime
+data/
+devdata/
+*.log
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Test fixtures
+tests/fixtures/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Coverage
+.coverage
+htmlcov/
+
+# TLS / certs (generated locally)
+*.crt
+*.key
+*.pem
+!deploy/gen-certs.sh

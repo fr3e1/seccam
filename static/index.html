@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SecCam — Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="header" role="banner">
+    <div class="container header-inner">
+      <a class="header-brand" href="/" aria-label="SecCam Dashboard">SecCam</a>
+      <div class="header-actions">
+        <div class="header-status disconnected" id="connectionStatus" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusText">Disconnected</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="notifBtn" aria-label="Notifications" aria-pressed="false" title="Enable notifications">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </button>
+        <button class="btn btn-ghost btn-sm" id="settingsBtn" aria-label="Settings" aria-expanded="false" aria-controls="settingsDrawer">⚙</button>
+        <button class="btn btn-ghost btn-sm" id="addCameraBtn" aria-label="Add camera" aria-expanded="false" aria-controls="addCameraPanel">+ Camera</button>
+        <form id="logoutForm" action="/api/logout" method="POST" style="display:inline">
+          <button class="btn btn-ghost btn-sm" type="submit">Logout</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main" role="main">
+    <section class="camera-grid" id="cameraGrid" aria-label="Live cameras">
+    </section>
+
+    <aside class="sidebar" aria-label="Events and settings">
+      <div class="card" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+        <div class="card-header events-header">
+          <h2 class="events-title">Events</h2>
+        </div>
+        <div class="events-filters" id="eventFilters" role="group" aria-label="Filter events by label">
+        </div>
+        <div class="events-list" id="eventsList" role="feed" aria-label="Event timeline">
+        </div>
+        <div class="load-more">
+          <button class="btn btn-ghost" id="loadMoreBtn" type="button">Load more</button>
+        </div>
+      </div>
+
+      <div class="card stats-bar" id="statsBar" aria-label="Statistics">
+      </div>
+    </aside>
+  </main>
+
+  <div class="drawer-overlay hidden" id="drawerOverlay" aria-hidden="true"></div>
+  <aside class="drawer" id="settingsDrawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-hidden="true">
+    <div class="drawer-header">
+      <h2 id="settingsTitle" class="drawer-title" style="font-size: 16px; font-weight: 600;">Settings</h2>
+      <button class="btn btn-ghost modal-close" id="settingsClose" aria-label="Close settings"></button>
+    </div>
+    <div class="drawer-body" id="settingsBody">
+    </div>
+    <div class="drawer-footer">
+      <button class="btn btn-primary" id="settingsSave" type="button">Save</button>
+    </div>
+  </aside>
+
+  <div class="add-camera-panel hidden" id="addCameraPanel" role="dialog" aria-modal="false" aria-labelledby="addCameraTitle">
+    <button class="add-camera-close" id="addCameraClose" aria-label="Close"></button>
+    <h3 id="addCameraTitle" class="add-camera-title">Add Camera</h3>
+    <p style="color: var(--muted); font-size: 13px; margin-bottom: 8px;">Open this URL on your iPhone in Safari:</p>
+    <div class="add-camera-url" id="addCameraUrl"></div>
+    <a class="btn btn-primary w-full" id="addCameraSetupLink" href="/setup" target="_blank" rel="noopener">Setup Guide</a>
+  </div>
+
+  <div class="modal-overlay hidden" id="eventModalOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
+      <div class="modal-header">
+        <h3 id="eventModalTitle" class="modal-title">Event Details</h3>
+        <button class="modal-close" id="eventModalClose" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <img class="event-modal-image" id="eventModalImage" alt="Event snapshot">
+        <div class="event-modal-details" id="eventModalDetails"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="eventModalDelete" type="button">Delete</button>
+        <button class="btn btn-ghost" id="eventModalCloseBtn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module" src="/static/viewer.js"></script>
+</body>
+</html>
