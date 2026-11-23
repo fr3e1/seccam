@@ -1,154 +1,188 @@
 # SecCam
 
-Self-hosted AI security camera. An iPhone acts as the camera (on-device TensorFlow.js detection with server-side YOLOX-Nano fallback). Viewers watch live events from any browser.
-
-## How it works
+Self-hosted AI security camera. Any phone, laptop or small Linux box becomes a camera; detection runs on the device
+(TensorFlow.js) or on the server (YOLOX-Nano ONNX); viewers watch live previews and recorded events from any browser.
 
 ```
-iPhone Safari (TF.js on-device AI) --wss--> SecCam Server (FastAPI + YOLOX-Nano fallback) --> Browser Dashboard
+Android Chrome / iPhone Safari / Linux browser (TF.js) --wss-->  SecCam server (FastAPI)  -->  browser dashboard
+Headless agent (ffmpeg + V4L2 USB/Pi camera)        --wss-->  (YOLOX-Nano fallback)
 ```
 
 ## Features
 
-- On-device detection via TensorFlow.js COCO-SSD (lite_mobilenet_v2); the server only receives low-rate preview frames, detections and event snapshots, never runs AI
-- Server fallback: streams JPEG frames; server runs YOLOX-Nano (ONNX, 416×416)
-- Auto mode: phone tries local first, falls back if model fails to load or avg inference > 1.2 s over first 5 runs
-- Event recording: snapshots with bounding boxes, thumbnails, SQLite index, configurable retention
-- Multi-viewer: any number of browsers watch live preview + events
-- Low resource: targets 1 vCPU, 1 GB RAM LXC; ~60 MB RAM idle, ~120 MB with server AI
-- Secure by default: PIN auth, HttpOnly Secure cookies, local CA for TLS, systemd hardening
-- First-run setup wizard: choose PIN and preferences in browser (no CLI required)
+- Cameras: Android Chrome, iPhone Safari, any Linux desktop browser, and a headless agent for USB and Raspberry Pi cameras
+- On-device detection (COCO-SSD) with server-side YOLOX-Nano fallback; modes `auto`, `local`, `server`
+- Event recording: snapshots with boxes, thumbnails, SQLite index, configurable retention
+- Admin account with optional TOTP and recovery codes, device pairing, session management
+- Eight dark and light themes, one server-wide setting, remembered in each browser
+- One-click web updater with checksum verification, health check and automatic rollback
+- Runs on 1 vCPU / 1 GB RAM; no external CDNs; systemd hardening
 
 ## Requirements
 
-- Proxmox VE 8+/9 or any Debian 12 / Ubuntu 22.04+ machine
-- iPhone with iOS 16.4+ (Safari, WebGL support)
-- Same LAN (no port-forwarding needed or recommended)
+- Debian 12 (Python 3.11.2) or Ubuntu 22.04+, or a Proxmox VE 8+/9 host (the installer creates a container)
+- A browser with `getUserMedia` for camera pages (HTTPS is required by browsers; see the certificate or proxy sections)
 
-## Quick start (Proxmox)
+## Install
 
-Run **one command** in the Proxmox host shell:
+Proxmox, one command on the host shell:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/fr3e1/seccam/main/scripts/proxmox-install.sh)"
 ```
 
-Then open `https://<container-ip>/` in a browser → accept the certificate warning → the setup page asks for a PIN and preferences.
-
-## Quick start (any Debian 12 / Ubuntu 22.04+ machine)
+Any Debian/Ubuntu machine:
 
 ```bash
-git clone https://github.com/fr3e1/seccam.git
-cd seccam
+git clone https://github.com/fr3e1/seccam.git && cd seccam
 sudo ./deploy/install.sh
 ```
 
-## Connect your iPhone
+The installer creates the `seccam` user, installs the release under `/opt/seccam/releases/<version>` with a
+virtualenv in `/opt/seccam/venvs/`, points `/opt/seccam/current` at it, writes `/etc/seccam/seccam.env`, starts
+`seccam.service`, enables `seccam-update.path` and prints a **setup token**. Open the printed URL, enter the token and
+create the admin account. Lost the token? Run `sudo -u seccam /opt/seccam/current/venv/bin/python -m server.manage setup-token`.
 
-1. Open `http://<server-ip>/ca.crt` in **Safari** → Allow → "Profile Downloaded"
-2. Settings → General → VPN & Device Management → tap "SecCam Local CA" → Install
-3. Settings → General → About → Certificate Trust Settings → enable "SecCam Local CA"
-4. Open `https://<server-ip>/camera` in Safari, log in with your PIN, tap **Start**
-5. **Tip**: Settings → Display & Brightness → Auto-Lock → Never; keep Safari in front; use a charger
+Options: `--retention DAYS`, `--trusted-proxies LIST --public-origin URL` (reverse-proxy mode, below), `--pin PIN`
+(legacy v1 credential, only used to migrate a v1 install).
 
-## Using the dashboard
+### Migrating from v1
 
-- **Live view**: real-time preview frames from all cameras with latest detections overlaid
-- **Events**: chronological list with thumbnails; filter by label and camera
-- **Notifications**: browser notifications for new events while the dashboard is open (bell icon)
-- **Settings**: detection labels, confidence threshold, cooldown, preview/detect FPS, AI mode, retention
-- **Change PIN**: Settings → Security → Change PIN (invalidates all other sessions)
+Run `sudo ./deploy/install.sh` from a v2 checkout. It converts the flat `/opt/seccam` layout to `releases/` + `current`,
+keeps `/var/lib/seccam` and your env file, drops `SECCAM_STATIC_DIR`/`SECCAM_MODEL_PATH` lines that point into
+`/opt/seccam/`, sets `SECCAM_UPDATE_MODE=systemd`, and removes the old flat files only after the new layout answers
+`/api/health`. Enter the v1 PIN on the first-run setup page to create the admin account.
 
-## AI modes
+## Cameras
 
-| Mode | Description | Models |
-|------|-------------|--------|
-| `auto` (default) | Phone loads TF.js + COCO-SSD. Falls back to server if load fails or avg inference > 1200 ms over first 5 runs. | TF.js COCO-SSD (lite_mobilenet_v2) → YOLOX-Nano ONNX |
-| `local` | Forces on-phone detection. Errors shown in UI. | TF.js COCO-SSD only |
-| `server` | Forces server-side detection. Phone sends JPEG frames at `detect_fps`. | YOLOX-Nano ONNX only |
+### Android Chrome
+1. Open `https://<server>/camera` in Chrome and sign in as the admin, or pair the browser instead: open `/pair` and enter a code from Settings > Devices. HTTPS is required; either install the local CA (served at
+   `/ca.crt`) or use a real certificate through a reverse proxy.
+2. Tap **Start**, allow camera access. The page keeps the screen awake (Wake Lock) while running.
+3. Use "Add to Home screen" for a full-screen app, and keep the phone charging.
 
-Resource use: ~60 MB RAM idle, ~120 MB with server AI, 1 vCPU fine (ONNX Runtime single-threaded).
+### iPhone Safari
+1. Open `http://<server>/ca.crt` in Safari, allow the profile download, install it under Settings > General > VPN & Device
+   Management, then enable it under Settings > General > About > Certificate Trust Settings.
+2. Open `https://<server>/camera`, sign in (or pair at `/pair` with a code from Settings > Devices), tap **Start**. Set Auto-Lock to Never and keep Safari in front.
+
+### Linux browser
+Open `https://<server>/camera` in Firefox or Chrome on any Linux desktop or laptop with a webcam. Trust the CA
+(`/ca.crt`) in the browser, or use a proxy with a public certificate.
+
+### Headless agent (USB and Raspberry Pi cameras)
+`agent/` holds a single-file agent that streams a V4L2 camera through `ffmpeg`:
+
+```bash
+sudo ./agent/install-agent.sh              # on the camera machine
+```
+
+In the web UI open **Devices** and create a pairing code (valid 10 minutes), then pair and start:
+
+```bash
+sudo -u seccam-agent python3 /opt/seccam-agent/seccam_agent.py pair --server https://<server> \
+    --code XXXX-XXXX --name "Garage" --token-file /var/lib/seccam-agent/token --ca-file /path/to/ca.crt
+sudo systemctl start seccam-agent
+```
+
+See [agent/README.md](agent/README.md) for options. Revoke a device in the UI or with `manage revoke-device`.
+
+## Hosting on the internet (reverse proxy)
+
+Do not expose the built-in listener directly. Put Caddy or nginx in front, terminate TLS there, and run SecCam on
+loopback. Examples: [deploy/Caddyfile.example](deploy/Caddyfile.example), [deploy/nginx.conf.example](deploy/nginx.conf.example).
+
+1. Install in proxy mode (first install), or edit `/etc/seccam/seccam.env` and restart:
+   ```bash
+   sudo ./deploy/install.sh --trusted-proxies 127.0.0.1 --public-origin https://cam.example.com
+   ```
+   The proxy flags only write `SECCAM_HOST`, the port and the missing cert lines on a **first** install. On an existing
+   install they add just `SECCAM_TRUSTED_PROXIES` and `SECCAM_PUBLIC_ORIGIN`; edit the env file by hand for the rest. A
+   first install sets `SECCAM_HOST=127.0.0.1`, `SECCAM_HTTPS_PORT=8443`, no `SECCAM_CERT`/`SECCAM_KEY` (the main listener serves plain
+   HTTP on `SECCAM_HTTPS_PORT` when no certificate is set), `SECCAM_TRUSTED_PROXIES=127.0.0.1`,
+   `SECCAM_PUBLIC_ORIGIN=https://cam.example.com` and `SECCAM_COOKIE_SECURE=true`.
+2. **`SECCAM_PUBLIC_ORIGIN` is mandatory behind a proxy.** It is the exact origin browsers use; WebSocket and API origin
+   checks compare against it.
+3. The proxy must keep the original `Host` header, set `X-Forwarded-For`/`X-Forwarded-Proto`, and upgrade WebSockets on `/ws/`.
+   The example files do all of this.
+4. Enable TOTP for every admin account, use strong passwords, and keep the web updater on (see SECURITY.md).
+
+## Updates
+
+With `SECCAM_UPDATE_MODE=systemd` (set by the installer), admins see new GitHub releases under Settings > Update and can
+click **Update**. The server only writes a request file; a root `seccam-update.service` triggered by `seccam-update.path`
+downloads the release tarball over HTTPS from the allowed GitHub hosts, verifies it against `SHA256SUMS`, extracts it into
+`releases/<version>`, builds a hashed venv with wheels only, backs up the database, switches `current`, restarts, and waits for
+`/api/health` to report the new version. If the check fails it rolls back the code and the database. An interrupted update
+is rolled back at the next service start. If a release changes unit files the status says to re-run `deploy/install.sh`.
+
+Without the web updater: `git pull && sudo ./deploy/install.sh`.
+
+## Themes
+
+Pick a theme in Settings > Appearance (one server-wide setting, also remembered in the browser's localStorage): `dracula`, `nord`, `gruvbox-dark`, `tokyo-night`,
+`catppuccin-mocha`, `solarized-dark`, `solarized-light`, `one-dark`.
+
+## Admin CLI
+
+Run it as the service user, not as root:
+
+```bash
+sudo -u seccam /opt/seccam/current/venv/bin/python -m server.manage <command>
+```
+
+Commands: `create-admin`, `reset-password` (`--username`, `--password-stdin`), `disable-totp`, `revoke-sessions`,
+`list-devices`, `revoke-device ID`, `setup-token`. As root it refuses unless `--allow-root` is given, and then drops
+privileges to the data directory owner before touching anything.
 
 ## Configuration
 
-All settings via `/etc/seccam/seccam.env` (see `deploy/seccam.env.example`) or in the web UI (first-run wizard at `/welcome`, then the Settings drawer).
+Settings live in `/etc/seccam/seccam.env` ([example](deploy/seccam.env.example)) and in the web UI.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SECCAM_PIN` | *(optional, legacy)* | Login PIN (4–12 digits). If unset, first-run wizard creates it. |
-| `SECCAM_SECRET` | auto-generated | Session signing key (generated once, stored in `DATA_DIR/secret`). |
-| `SECCAM_DATA_DIR` | `/var/lib/seccam` | Data directory (events, snapshots, secret). |
-| `SECCAM_RETENTION_DAYS` | `14` | Event retention (also editable in UI). |
-| `SECCAM_MODEL_PATH` | `/opt/seccam/models/yolox_nano.onnx` | ONNX model path. |
-| `SECCAM_HOST` | `0.0.0.0` | Bind address. |
-| `SECCAM_HTTPS_PORT` | `443` | HTTPS port. |
-| `SECCAM_HTTP_PORT` | `80` | HTTP redirect port (serves `/ca.crt`, `/setup`, redirects rest). |
-| `SECCAM_CERT` | `/etc/seccam/tls/server.crt` | TLS certificate. |
-| `SECCAM_KEY` | `/etc/seccam/tls/server.key` | TLS private key. |
-| `SECCAM_CA_CERT` | `/etc/seccam/tls/ca.crt` | CA certificate (served at `/ca.crt`). |
-| `SECCAM_STATIC_DIR` | `/opt/seccam/static` | Static files directory. |
-
-### Detection settings (via UI / API)
-
-| Setting | Range | Default | Description |
-|---------|-------|---------|-------------|
-| `labels` | subset of `ALL_LABELS` | person, car, truck, bus, motorcycle, bicycle, cat, dog, bird | Which classes trigger events |
-| `min_score` | 0.1–0.95 | 0.55 | Minimum confidence |
-| `cooldown_s` | 0–3600 | 30 | Seconds between events per camera |
-| `preview_fps` | 0.2–10 | 2 | Preview frame rate (phone → server/viewers) |
-| `detect_fps` | 0.2–10 | 2 | Server detection rate (server mode) |
-| `mode` | auto\|local\|server | auto | Detection mode |
-| `retention_days` | 1–365 | 14 | Event retention (also in env) |
-
-## Updating
-
-Inside the container (or on the host for bare-metal):
-
-```bash
-cd /opt/seccam-src && git pull && ./deploy/install.sh
-```
-
-Preserves `/var/lib/seccam` data, updates code, restarts service.
+| `SECCAM_DATA_DIR` | `./data` (`/var/lib/seccam` installed) | Database, snapshots, secret |
+| `SECCAM_RETENTION_DAYS` | `14` | Event retention |
+| `SECCAM_MODEL_PATH` | `<release>/models/yolox_nano.onnx` | ONNX model |
+| `SECCAM_STATIC_DIR` | `<release>/static` | Static files |
+| `SECCAM_HOST` | `0.0.0.0` | Bind address |
+| `SECCAM_HTTPS_PORT` | `8443` (`443` installed) | Main listener: TLS with a cert, plain HTTP without |
+| `SECCAM_HTTP_PORT` | `8080` (`80` installed) | Redirect listener (serves `/ca.crt`) |
+| `SECCAM_CERT`, `SECCAM_KEY`, `SECCAM_CA_CERT` | empty | TLS files |
+| `SECCAM_TRUSTED_PROXIES` | empty | IPs/CIDRs allowed to set `X-Forwarded-*` |
+| `SECCAM_PUBLIC_ORIGIN` | empty | Public origin; mandatory behind a proxy |
+| `SECCAM_COOKIE_SECURE` | `auto` | `auto`, `true` or `false` |
+| `SECCAM_SESSION_TTL_DAYS` | `30` | Session lifetime (1-365) |
+| `SECCAM_UPDATE_MODE` | `off` (`systemd` installed) | Web updater |
+| `SECCAM_UPDATE_REPO` | `fr3e1/seccam` | GitHub `owner/repo` for updates |
+| `SECCAM_SECRET` | auto | Reserved |
+| `SECCAM_PIN` | empty | Legacy v1 credential for migration |
 
 ## Development
 
+Python 3.11+ (Debian 12's 3.11.2 is supported) and Node 22 for the JS tests.
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-pytest -q
-python -m server.main   # serves plain HTTP on :8443 (dev mode, no certs)
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements-dev.txt
+.venv/bin/python -m pytest -q --timeout 60
+node --test tests/js/*.test.mjs
+.venv/bin/python -m server.main     # plain HTTP on :8443
 ```
 
-Open `http://localhost:8443/` in a browser.
+Releases: bump `VERSION`, push a tag `vX.Y.Z`; the release workflow tests, runs `scripts/make-release.sh` and publishes
+`seccam-X.Y.Z.tar.gz` with `SHA256SUMS`.
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| "Certificate not trusted" on iPhone | iOS doesn't trust local CA | Open `https://<server>/ca.crt` → Settings → VPN & Device Management → Trust "SecCam Local CA" |
-| Camera stops after screen locks | iOS Auto-Lock | Settings → Display & Brightness → Auto-Lock → Never |
-| Camera stops when switching apps | iOS suspends background tabs | Keep camera tab foreground; add to Home Screen |
-| "Model load failed" on phone | Old iOS / no WebGL | Falls back to server mode automatically; or force `server` mode in Settings |
-| High CPU on server | YOLOX-Nano running | Normal during detection; limited to 1 thread, `detect_fps` max 10 |
-| No events recorded | Labels / score / cooldown | Check Settings: enabled labels, `min_score`, `cooldown_s` |
-| Viewer shows stale frames | WebSocket backpressure | Server drops slow viewers (2 s timeout); refresh page |
-| IP changed | DHCP lease expired | Re-run installer to reissue cert; recommend DHCP reservation |
-
-## Security notes
-
-- **LAN only** — do not port-forward 443/80 to the internet
-- Change the default PIN (via `--pin` on install or Settings → Security)
-- The local CA is generated per-host; install `ca.crt` only on trusted devices
-- Sessions are signed cookies (HMAC-SHA256), 30-day TTL, HttpOnly, Secure, SameSite=Lax
-- Login rate-limited: 5 failures / 5 min per IP → 5 min lockout
-- Systemd hardening: `NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, memory/CPU limits, minimal capabilities (`CAP_NET_BIND_SERVICE` only for ports 80/443)
-- No external CDNs — all JS/CSS served locally
+| Symptom | Fix |
+|---------|-----|
+| Browser refuses the camera | Camera needs HTTPS: trust `/ca.crt` or use a reverse proxy with a real certificate |
+| Login or WebSocket fails behind a proxy | Check `SECCAM_PUBLIC_ORIGIN`, `SECCAM_TRUSTED_PROXIES` and that `Host` is preserved |
+| Camera stops when the screen locks | Keep the page in front, disable auto-lock, use a charger; or use the headless agent |
+| Update shows `rolled_back` | See `journalctl -u seccam-update`; the previous version is running |
+| Lost setup token | `sudo -u seccam ... python -m server.manage setup-token` |
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
-
-## Third-party notices
-
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+MIT, see [LICENSE](LICENSE). Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

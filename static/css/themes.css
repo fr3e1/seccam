@@ -1,0 +1,247 @@
+/* Theme palettes (official terminal colour schemes). Each theme sets every variable below.
+   [data-theme] on .theme-scope lets pickers preview a theme inside a swatch. */
+
+:root,
+:root[data-theme="dracula"],
+.theme-scope[data-theme="dracula"] {
+  --bg: #282a36;
+  --bg-alt: #21222c;
+  --bg-hl: #44475a;
+  --fg: #f8f8f2;
+  --muted: #6272a4;
+  --border: #44475a;
+  --accent: #bd93f9;
+  --accent-fg: #282a36;
+  --ok: #50fa7b;
+  --warn: #ffb86c;
+  --err: #ff5555;
+  --info: #8be9fd;
+  --sel: #44475a;
+  --cursor: #f8f8f2;
+  --black: #21222c;
+  --red: #ff5555;
+  --green: #50fa7b;
+  --yellow: #f1fa8c;
+  --blue: #bd93f9;
+  --magenta: #ff79c6;
+  --cyan: #8be9fd;
+  --white: #f8f8f2;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="nord"],
+.theme-scope[data-theme="nord"] {
+  --bg: #2e3440;
+  --bg-alt: #3b4252;
+  --bg-hl: #434c5e;
+  --fg: #d8dee9;
+  --muted: #4c566a;
+  --border: #434c5e;
+  --accent: #88c0d0;
+  --accent-fg: #2e3440;
+  --ok: #a3be8c;
+  --warn: #ebcb8b;
+  --err: #bf616a;
+  --info: #81a1c1;
+  --sel: #434c5e;
+  --cursor: #d8dee9;
+  --black: #3b4252;
+  --red: #bf616a;
+  --green: #a3be8c;
+  --yellow: #ebcb8b;
+  --blue: #81a1c1;
+  --magenta: #b48ead;
+  --cyan: #88c0d0;
+  --white: #e5e9f0;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="gruvbox-dark"],
+.theme-scope[data-theme="gruvbox-dark"] {
+  --bg: #282828;
+  --bg-alt: #1d2021;
+  --bg-hl: #3c3836;
+  --fg: #ebdbb2;
+  --muted: #928374;
+  --border: #504945;
+  --accent: #fabd2f;
+  --accent-fg: #282828;
+  --ok: #b8bb26;
+  --warn: #fe8019;
+  --err: #fb4934;
+  --info: #83a598;
+  --sel: #504945;
+  --cursor: #ebdbb2;
+  --black: #282828;
+  --red: #fb4934;
+  --green: #b8bb26;
+  --yellow: #fabd2f;
+  --blue: #83a598;
+  --magenta: #d3869b;
+  --cyan: #8ec07c;
+  --white: #a89984;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="tokyo-night"],
+.theme-scope[data-theme="tokyo-night"] {
+  --bg: #1a1b26;
+  --bg-alt: #16161e;
+  --bg-hl: #292e42;
+  --fg: #c0caf5;
+  --muted: #565f89;
+  --border: #3b4261;
+  --accent: #7aa2f7;
+  --accent-fg: #1a1b26;
+  --ok: #9ece6a;
+  --warn: #e0af68;
+  --err: #f7768e;
+  --info: #7dcfff;
+  --sel: #283457;
+  --cursor: #c0caf5;
+  --black: #15161e;
+  --red: #f7768e;
+  --green: #9ece6a;
+  --yellow: #e0af68;
+  --blue: #7aa2f7;
+  --magenta: #bb9af7;
+  --cyan: #7dcfff;
+  --white: #a9b1d6;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="catppuccin-mocha"],
+.theme-scope[data-theme="catppuccin-mocha"] {
+  --bg: #1e1e2e;
+  --bg-alt: #181825;
+  --bg-hl: #313244;
+  --fg: #cdd6f4;
+  --muted: #6c7086;
+  --border: #45475a;
+  --accent: #cba6f7;
+  --accent-fg: #1e1e2e;
+  --ok: #a6e3a1;
+  --warn: #f9e2af;
+  --err: #f38ba8;
+  --info: #89b4fa;
+  --sel: #45475a;
+  --cursor: #f5e0dc;
+  --black: #45475a;
+  --red: #f38ba8;
+  --green: #a6e3a1;
+  --yellow: #f9e2af;
+  --blue: #89b4fa;
+  --magenta: #f5c2e7;
+  --cyan: #94e2d5;
+  --white: #bac2de;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="solarized-dark"],
+.theme-scope[data-theme="solarized-dark"] {
+  --bg: #002b36;
+  --bg-alt: #073642;
+  --bg-hl: #073642;
+  --fg: #839496;
+  --muted: #586e75;
+  --border: #586e75;
+  --accent: #268bd2;
+  --accent-fg: #fdf6e3;
+  --ok: #859900;
+  --warn: #b58900;
+  --err: #dc322f;
+  --info: #2aa198;
+  --sel: #073642;
+  --cursor: #93a1a1;
+  --black: #073642;
+  --red: #dc322f;
+  --green: #859900;
+  --yellow: #b58900;
+  --blue: #268bd2;
+  --magenta: #d33682;
+  --cyan: #2aa198;
+  --white: #eee8d5;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="solarized-light"],
+.theme-scope[data-theme="solarized-light"] {
+  --bg: #fdf6e3;
+  --bg-alt: #eee8d5;
+  --bg-hl: #eee8d5;
+  --fg: #657b83;
+  --muted: #93a1a1;
+  --border: #93a1a1;
+  --accent: #268bd2;
+  --accent-fg: #fdf6e3;
+  --ok: #859900;
+  --warn: #b58900;
+  --err: #dc322f;
+  --info: #2aa198;
+  --sel: #eee8d5;
+  --cursor: #586e75;
+  --black: #073642;
+  --red: #dc322f;
+  --green: #859900;
+  --yellow: #b58900;
+  --blue: #268bd2;
+  --magenta: #d33682;
+  --cyan: #2aa198;
+  --white: #eee8d5;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root[data-theme="one-dark"],
+.theme-scope[data-theme="one-dark"] {
+  --bg: #282c34;
+  --bg-alt: #21252b;
+  --bg-hl: #2c313c;
+  --fg: #abb2bf;
+  --muted: #5c6370;
+  --border: #3e4451;
+  --accent: #61afef;
+  --accent-fg: #282c34;
+  --ok: #98c379;
+  --warn: #e5c07b;
+  --err: #e06c75;
+  --info: #56b6c2;
+  --sel: #3e4451;
+  --cursor: #528bff;
+  --black: #282c34;
+  --red: #e06c75;
+  --green: #98c379;
+  --yellow: #e5c07b;
+  --blue: #61afef;
+  --magenta: #c678dd;
+  --cyan: #56b6c2;
+  --white: #abb2bf;
+  --label-person: var(--red);
+  --label-vehicle: var(--yellow);
+  --label-animal: var(--green);
+  --label-object: var(--magenta);
+}
+
+:root {
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}

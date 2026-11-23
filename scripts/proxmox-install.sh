@@ -179,6 +179,7 @@ FAILED_STEP="install.sh"
 log_info "Running SecCam install.sh inside container..."
 pct exec "$CTID" -- bash /opt/seccam-src/deploy/install.sh >/dev/null
 log_ok "SecCam installed successfully"
+SETUP_TOKEN=$(pct exec "$CTID" -- cat /var/lib/seccam/setup-token 2>/dev/null | tr -d '[:space:]' || true)
 
 # --- Summary ---
 echo ""
@@ -188,8 +189,13 @@ echo -e "Hostname:        ${BLUE}$CT_HOSTNAME${NC}"
 echo -e "IP Address:      ${BLUE}$CT_IP${NC}"
 echo -e "Root password:   ${YELLOW}(random, not shown)${NC}"
 echo ""
-echo -e "Open in browser: ${GREEN}https://$CT_IP/${NC}  (first-run setup, choose your PIN)"
-echo -e "iPhone cert:     ${GREEN}http://$CT_IP/ca.crt${NC}  (install on iPhone for camera access)"
+echo -e "Open in browser: ${GREEN}https://$CT_IP/${NC}  (first-run setup: create the admin account)"
+if [[ -n "$SETUP_TOKEN" ]]; then
+    echo -e "Setup token:     ${YELLOW}$SETUP_TOKEN${NC}  (needed once on the setup page)"
+else
+    echo -e "Setup token:     already used; to see a new one: pct exec $CTID -- sudo -u seccam /opt/seccam/current/venv/bin/python -m server.manage setup-token"
+fi
+echo -e "iPhone cert:     ${GREEN}http://$CT_IP/ca.crt${NC}  (install on iPhone to trust the local CA)"
 echo ""
 echo -e "Manage container:"
 echo -e "  pct enter $CTID          # shell inside container"

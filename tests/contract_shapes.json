@@ -1,0 +1,35 @@
+{
+  "Settings": {
+    "labels": ["person", "car"], "min_score": 0.55, "cooldown_s": 30, "preview_fps": 2, "detect_fps": 2,
+    "mode": "auto", "retention_days": 14, "theme": "tokyo-night", "jpeg_quality": 0.7, "capture_width": 960
+  },
+  "Detection": {"label": "person", "score": 0.9, "bbox": [10, 20, 100, 200]},
+  "Event": {
+    "id": 1, "ts": 1760000000000, "camera_id": "cam1", "camera_name": "Front Door", "labels": ["person"],
+    "max_score": 0.9, "detections": [{"label": "person", "score": 0.9, "bbox": [10, 20, 100, 200]}],
+    "frame_w": 640, "frame_h": 480, "snapshot_url": "/api/events/1/snapshot.jpg", "thumb_url": "/api/events/1/thumb.jpg"
+  },
+  "Camera": {
+    "camera_id": "cam1", "name": "Front Door", "mode": "server", "kind": "browser", "device_id": "0123456789ab",
+    "connected": true, "last_seen": 1760000000000, "fps": 2.0, "infer_ms": 35.5
+  },
+  "Device": {
+    "id": "0123456789ab", "name": "Garage", "kind": "agent", "created_at": 1760000000000,
+    "last_seen_at": 1760000001000, "last_ip": "192.168.1.20", "connected": true
+  },
+  "UpdateStatus": {
+    "state": "idle", "version": null, "previous_version": null, "message": "", "updated_at": null
+  },
+  "UpdateInfo": {
+    "current_version": "2.0.0", "enabled": false, "update_available": true,
+    "latest": {"version": "2.1.0", "published_at": "2026-11-01T00:00:00Z", "notes": "Fixes", "html_url": "https://github.com/fr3e1/seccam/releases/tag/v2.1.0"},
+    "checked_at": 1760000000000, "error": null,
+    "status": {"state": "idle", "version": null, "previous_version": null, "message": "", "updated_at": null}
+  },
+  "Me": {"username": "admin", "totp_enabled": false, "csrf_token": "abc123", "session_expires_at": 1762600000000},
+  "Error": {"detail": "Not found", "code": "not_found"},
+  "ViewerFrameHeader": {
+    "camera_id": "cam1", "ts": 1760000000000,
+    "detections": [{"label": "person", "score": 0.9, "bbox": [10, 20, 100, 200]}], "frame_w": 640, "frame_h": 480
+  }
+}

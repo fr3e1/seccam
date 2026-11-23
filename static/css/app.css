@@ -1,0 +1,82 @@
+/* SecCam app pages (dashboard, camera). Uses variables from themes.css and the vocabulary in base.css. */
+
+/* ---------- dashboard ---------- */
+.topbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); position: sticky; top: 0; z-index: 20; }
+.brand { font-weight: 700; }
+.dash { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 12px; align-items: start; }
+.camera-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-content: start; }
+.grid-empty { grid-column: 1 / -1; }
+.side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.tile { border: 1px solid var(--border); background: var(--bg-alt); border-radius: 4px; overflow: hidden; }
+.tile-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--border); background: var(--bg-hl); }
+.tile-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-view { position: relative; aspect-ratio: 4 / 3; background: var(--black); }
+.tile-view canvas { display: block; width: 100%; height: 100%; }
+.tile-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+
+.filters { gap: 4px; margin-bottom: 8px; }
+.filter { min-height: 28px; padding: 0 8px; font: inherit; font-size: 0.85em; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 2px; cursor: pointer; }
+.filter[aria-pressed="true"] { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
+.filters .select { width: auto; min-height: 28px; padding: 0 6px; }
+.events-body { display: flex; flex-direction: column; gap: 8px; }
+.events { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.event-item { display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px; font: inherit; color: var(--fg); text-align: left; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; min-height: 40px; }
+.event-item:hover { border-color: var(--accent); }
+.event-new { border-color: var(--accent); }
+.event-thumb { flex: none; width: 64px; height: 48px; object-fit: cover; background: var(--black); border-radius: 2px; }
+.event-info { min-width: 0; flex: 1 1 0; }
+.event-info div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-image { display: block; max-width: 100%; max-height: 60vh; margin: 8px 0; background: var(--black); }
+.event-details { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 12px; }
+.event-details dt { color: var(--muted); }
+.event-details dd { margin: 0; overflow-wrap: anywhere; }
+.stats { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+.lbl { display: inline-block; padding: 0 6px; border: 1px solid var(--border); border-radius: 2px; font-size: 0.85em; }
+.lbl-person { color: var(--label-person); border-color: var(--label-person); }
+.lbl-vehicle { color: var(--label-vehicle); border-color: var(--label-vehicle); }
+.lbl-animal { color: var(--label-animal); border-color: var(--label-animal); }
+.lbl-object { color: var(--label-object); border-color: var(--label-object); }
+
+/* drawer pieces */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.5); }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-hl); }
+.drawer-head h2 { margin: 0; }
+.drawer-body { padding: 12px; }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row input[type="range"] { flex: 1 1 0; min-width: 0; accent-color: var(--accent); min-height: 40px; }
+.range-row output { min-width: 4ch; text-align: right; }
+.secret { display: block; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; overflow-wrap: anywhere; user-select: all; }
+.codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin: 8px 0; }
+.big-code { font-size: 1.6em; letter-spacing: 0.1em; font-weight: 700; color: var(--accent); }
+.release-notes { margin: 0 0 12px; padding: 8px; max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; font: inherit; }
+.section { margin-bottom: 20px; }
+.section > h3 { color: var(--accent); }
+.dev-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.dev-name { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+
+/* ---------- camera page ---------- */
+.cam-body { overflow-x: hidden; }
+.cam-page { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.hud { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); font-size: 0.9em; }
+.hud-labels { gap: 4px; }
+.viewfinder { position: relative; flex: 1 1 0; min-height: 240px; overflow: hidden; background: var(--black); touch-action: none; }
+.viewfinder video, .viewfinder canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.viewfinder video { object-fit: contain; }
+.viewfinder video.mirror { transform: scaleX(-1); }
+.viewfinder canvas { pointer-events: none; }
+.dim-layer { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; font: inherit; color: var(--muted); background: #000; border: 0; cursor: pointer; }
+.panel { margin: 12px; }
+.btn-block { width: 100%; min-height: 48px; }
+.controls { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--bg-alt); }
+.controls .btn { flex: 1 1 0; }
+
+@media (max-width: 900px) {
+  .dash { grid-template-columns: minmax(0, 1fr); }
+  .events { max-height: none; }
+}
+@media (max-width: 480px) {
+  .camera-grid { grid-template-columns: minmax(0, 1fr); }
+  .dash { padding: 8px; gap: 8px; }
+}

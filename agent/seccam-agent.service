@@ -1,0 +1,26 @@
+[Unit]
+Description=SecCam headless camera agent
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/seccam-agent/token
+
+[Service]
+Type=simple
+User=seccam-agent
+Group=seccam-agent
+SupplementaryGroups=video
+EnvironmentFile=/etc/seccam-agent.env
+ExecStart=/usr/bin/python3 /opt/seccam-agent/seccam_agent.py run
+Restart=on-failure
+RestartSec=3
+RestartPreventExitStatus=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

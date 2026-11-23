@@ -1,117 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="tokyo-night">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SecCam — Login</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="theme-color" content="#1a1b26">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <script src="/static/js/theme-boot.js"></script>
+  <link rel="stylesheet" href="/static/css/themes.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <title>SecCam: sign in</title>
+  <script type="module" src="/static/js/login.js"></script>
 </head>
 <body>
-  <div class="login-container">
-    <div class="card login-card">
-      <div class="card-body">
-        <div class="login-header">
-          <div class="login-logo">SecCam</div>
-          <div class="login-subtitle">Enter your PIN to continue</div>
-        </div>
-        <form id="loginForm" novalidate>
-          <div class="field">
-            <label class="label" for="pin">PIN</label>
-            <input class="input" type="password" id="pin" name="pin" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autofocus required aria-describedby="pinError">
-            <div id="pinError" class="sr-only" aria-live="polite"></div>
-          </div>
-          <button class="btn btn-primary w-full" type="submit" id="submitBtn">Sign in</button>
+  <main class="page-center">
+    <div class="term">
+      <div class="term-bar">seccam:~$ login</div>
+      <div class="term-body">
+        <form id="login-form" novalidate>
+          <label class="field">
+            <span class="field-label">username</span>
+            <input class="input" id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+          </label>
+          <label class="field">
+            <span class="field-label">password</span>
+            <input class="input" id="password" name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <label class="field hidden" id="totp-field">
+            <span class="field-label">2FA code or recovery code</span>
+            <input class="input" id="totp" name="totp" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" maxlength="16">
+          </label>
+          <p class="error-text" id="error" role="alert" aria-live="assertive"></p>
+          <button class="btn btn-primary" id="submit" type="submit">Sign in</button>
         </form>
-        <div id="errorMsg" class="mt-16 text-center text-sm text-danger hidden" role="alert" aria-live="assertive"></div>
       </div>
     </div>
-  </div>
-  <script>
-    (function() {
-      const form = document.getElementById('loginForm');
-      const pinInput = document.getElementById('pin');
-      const submitBtn = document.getElementById('submitBtn');
-      const errorMsg = document.getElementById('errorMsg');
-      const pinError = document.getElementById('pinError');
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const next = urlParams.get('next') || '/';
-
-      function showError(msg) {
-        errorMsg.textContent = msg;
-        errorMsg.classList.remove('hidden');
-        pinError.textContent = msg;
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Sign in';
-      }
-
-      function hideError() {
-        errorMsg.classList.add('hidden');
-        pinError.textContent = '';
-      }
-
-      function isSafeNext(path) {
-        return path.startsWith('/') && !path.startsWith('//');
-      }
-
-      async function checkSetup() {
-        try {
-          const res = await fetch('/api/setup/status', { credentials: 'same-origin' });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.setup_required) {
-              window.location.href = '/welcome';
-              return false;
-            }
-          }
-        } catch (err) {
-          // If check fails, allow login to proceed (server will enforce)
-        }
-        return true;
-      }
-
-      checkSetup().then(allowed => {
-        if (!allowed) return;
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          hideError();
-          const pin = pinInput.value.trim();
-          if (!pin) {
-            showError('Please enter your PIN');
-            pinInput.focus();
-            return;
-          }
-          submitBtn.disabled = true;
-          submitBtn.textContent = 'Signing in…';
-          try {
-            const res = await fetch('/api/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify({ pin })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.ok) {
-              window.location.href = isSafeNext(next) ? next : '/';
-            } else if (res.status === 429) {
-              showError(data.detail || 'Too many attempts. Please wait a moment.');
-            } else if (res.status === 403) {
-              window.location.href = '/welcome';
-            } else if (res.status === 401) {
-              showError('Invalid PIN');
-              pinInput.value = '';
-              pinInput.focus();
-            } else {
-              showError(data.detail || 'Login failed. Please try again.');
-            }
-          } catch (err) {
-            showError('Network error. Please check your connection.');
-          }
-        });
-
-        pinInput.addEventListener('input', hideError);
-      });
-    })();
-  </script>
+  </main>
 </body>
 </html>

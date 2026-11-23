@@ -1,0 +1,16 @@
+[Unit]
+Description=SecCam updater (runs as root, triggered by seccam-update.path)
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/seccam/seccam.env
+WorkingDirectory=/opt/seccam/current
+ExecStartPre=/opt/seccam/current/venv/bin/python -S -m server.updater recover --app-root /opt/seccam --data-dir /var/lib/seccam
+ExecStart=/opt/seccam/current/venv/bin/python -S -m server.updater apply --app-root /opt/seccam --data-dir /var/lib/seccam
+# Throttle (also runs after a failed start): at most one root run per ~10 s even if a request file cannot be removed.
+ExecStopPost=/bin/sleep 10
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=seccam-update

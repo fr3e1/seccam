@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for a SecCam web-updater request
+StartLimitIntervalSec=0
+
+[Path]
+PathExists=/var/lib/seccam/updates/request.json
+Unit=seccam-update.service
+TriggerLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

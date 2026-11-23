@@ -1,0 +1,18 @@
+# Caddy terminates TLS (automatic certificates) and forwards to SecCam on loopback.
+# Caddy preserves the original Host header and upgrades WebSockets (/ws/) by default.
+#
+# /etc/seccam/seccam.env must contain:
+#   SECCAM_HOST=127.0.0.1
+#   SECCAM_HTTPS_PORT=8443        (and no SECCAM_CERT / SECCAM_KEY: plain HTTP on loopback)
+#   SECCAM_TRUSTED_PROXIES=127.0.0.1
+#   SECCAM_PUBLIC_ORIGIN=https://cam.example.com   (mandatory behind a proxy)
+#   SECCAM_COOKIE_SECURE=true
+
+cam.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8443 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up Host {host}
+	}
+}

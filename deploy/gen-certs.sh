@@ -61,13 +61,19 @@ fi
 if [[ $REGEN_CA -eq 1 ]]; then
     echo "Generating CA certificate..."
     openssl ecparam -name prime256v1 -genkey -noout -out "$DIR/ca.key"
-    chmod 640 "$DIR/ca.key"
-    chown root:seccam "$DIR/ca.key" 2>/dev/null || true
+    chmod 600 "$DIR/ca.key"
+    chown root:root "$DIR/ca.key"
+
+    NC_ENTRIES="permitted;DNS:$HOSTNAME,permitted;DNS:$HOSTNAME.local,permitted;DNS:localhost,permitted;IP:127.0.0.1/255.255.255.255"
+    for ip in "${IPS[@]}"; do
+        NC_ENTRIES+=",permitted;IP:$ip/255.255.255.255"
+    done
 
     openssl req -x509 -new -nodes -key "$DIR/ca.key" -sha256 -days 3650 \
         -subj "/CN=SecCam Local CA" \
         -addext "basicConstraints=critical,CA:TRUE" \
         -addext "keyUsage=critical,keyCertSign,cRLSign" \
+        -addext "nameConstraints=critical,$NC_ENTRIES" \
         -addext "subjectKeyIdentifier=hash" \
         -out "$DIR/ca.crt"
     chmod 644 "$DIR/ca.crt"
@@ -156,8 +162,11 @@ else
 fi
 
 # Set permissions on keys
-chmod 640 "$DIR/ca.key" "$DIR/server.key" 2>/dev/null || true
-chown root:seccam "$DIR/ca.key" "$DIR/server.key" 2>/dev/null || true
+# The CA key is root-only (never readable by the service user); the server key is readable by the service.
+chmod 600 "$DIR/ca.key"
+chown root:root "$DIR/ca.key"
+chmod 640 "$DIR/server.key" 2>/dev/null || true
+chown root:seccam "$DIR/server.key" 2>/dev/null || true
 
 echo "Certificate generation complete"
 echo "CA:      $DIR/ca.crt"
