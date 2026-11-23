@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="tokyo-night">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a1b26">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <script src="/static/js/theme-boot.js"></script>
+  <link rel="stylesheet" href="/static/css/themes.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <title>SecCam: pair this device</title>
+  <script type="module" src="/static/js/pair.js"></script>
+</head>
+<body>
+  <main class="page-center">
+    <div class="term">
+      <div class="term-bar">seccam:~$ pair</div>
+      <div class="term-body">
+        <p class="muted">Enter the pairing code shown in the dashboard under Settings, Devices.</p>
+        <form id="pair-form" novalidate>
+          <label class="field">
+            <span class="field-label">pairing code</span>
+            <input class="input" id="code" name="code" type="text" placeholder="XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" required autofocus>
+          </label>
+          <label class="field">
+            <span class="field-label">device name</span>
+            <input class="input" id="name" name="name" type="text" maxlength="64" autocomplete="off">
+          </label>
+          <p class="error-text" id="error" role="alert" aria-live="assertive"></p>
+          <div class="row wrap">
+            <button class="btn btn-primary" id="submit" type="submit">Pair</button>
+            <a class="btn btn-ghost" id="admin-link" href="/login?next=/camera">admin? sign in</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

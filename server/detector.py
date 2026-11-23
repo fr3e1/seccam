@@ -24,6 +24,10 @@ COCO_CLASSES = [
     "toothbrush"
 ]
 
+# Frames larger than this per side are rejected before decoding (decompression-bomb guard)
+MAX_DIM = 4096
+Image.MAX_IMAGE_PIXELS = MAX_DIM * MAX_DIM
+
 # Strides and grid sizes for YOLOX-Nano
 STRIDES = [8, 16, 32]
 GRID_SIZES = [52, 26, 13]  # 416 / stride
@@ -294,10 +298,16 @@ class Detector:
 
         # Decode JPEG with Pillow
         from io import BytesIO
-        img = Image.open(BytesIO(jpeg))
-        img.load()  # Force decode
-
+        try:
+            img = Image.open(BytesIO(jpeg))
+        except Image.DecompressionBombError as e:
+            raise ValueError("frame too large") from e
         frame_w, frame_h = img.size
+        if not (0 < frame_w <= MAX_DIM and 0 < frame_h <= MAX_DIM):
+            raise ValueError("frame too large")
+        # Reduced-size JPEG decode (DCT scaling) keeps memory small; must precede load()
+        img.draft("RGB", (self.input_size * 2, self.input_size * 2))
+        img.load()
 
         # Preprocess
         input_tensor, ratio, orig_w, orig_h = self._preprocess(img)
@@ -310,6 +320,13 @@ class Detector:
 
         # Postprocess
         detections = self._postprocess(output, ratio, orig_w, orig_h)
+
+        # Boxes are in the (possibly downscaled) processed space; map back to frame pixels
+        if orig_w != frame_w or orig_h != frame_h:
+            sx, sy = frame_w / orig_w, frame_h / orig_h
+            for d in detections:
+                x, y, w, h = d["bbox"]
+                d["bbox"] = [round(x * sx, 1), round(y * sy, 1), round(w * sx, 1), round(h * sy, 1)]
 
         return detections, frame_w, frame_h, infer_ms
 

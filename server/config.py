@@ -1,12 +1,16 @@
+import ipaddress
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
+_ORIGIN_RE = re.compile(r"^https?://[A-Za-z0-9.\-\[\]:]+$")
+_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
 
 @dataclass(frozen=True)
 class Config:
-    pin: str
     secret: str
     data_dir: Path
     retention_days: int
@@ -18,49 +22,84 @@ class Config:
     key: str
     ca_cert: str
     static_dir: Path
+    legacy_pin: str
+    trusted_proxies: tuple[str, ...]
+    public_origin: str
+    cookie_secure: str
+    update_mode: str
+    update_repo: str
+    session_ttl_days: int
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.getenv(name, "").strip() or default
+
+
+def _int(name: str, default: int, lo: int, hi: int) -> int:
+    raw = _env(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{name}: must be an integer") from None
+    if not lo <= value <= hi:
+        raise ValueError(f"{name}: must be between {lo} and {hi}")
+    return value
+
+
+def _choice(name: str, default: str, choices: tuple[str, ...]) -> str:
+    value = _env(name, default)
+    if value not in choices:
+        raise ValueError(f"{name}: must be one of: {', '.join(choices)}")
+    return value
 
 
 def load_config() -> Config:
-    # PIN: empty string if not set (no default)
-    pin = os.getenv("SECCAM_PIN", "")
+    repo_root = Path(__file__).resolve().parent.parent
 
-    # Data directory
-    data_dir = Path(os.getenv("SECCAM_DATA_DIR", "./data")).resolve()
+    data_dir = Path(_env("SECCAM_DATA_DIR", "./data")).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Secret: generate once, store in data_dir/secret with mode 0600
-    secret_file = data_dir / "secret"
-    if os.getenv("SECCAM_SECRET", "").strip():
-        secret = os.environ["SECCAM_SECRET"].strip()
-    elif secret_file.exists():
-        secret = secret_file.read_text().strip()
-    else:
-        secret = secrets.token_hex(32)
-        secret_file.write_text(secret)
-        secret_file.chmod(0o600)
+    # Secret: env, else <data_dir>/secret (generated once, mode 0600). Reserved; no longer signs cookies.
+    secret = _env("SECCAM_SECRET")
+    if not secret:
+        secret_file = data_dir / "secret"
+        if secret_file.exists():
+            secret = secret_file.read_text().strip()
+        else:
+            secret = secrets.token_hex(32)
+            secret_file.write_text(secret)
+            secret_file.chmod(0o600)
 
-    # Retention days
-    retention_days = int(os.getenv("SECCAM_RETENTION_DAYS", "14"))
+    retention_days = _int("SECCAM_RETENTION_DAYS", 14, 1, 365)
+    model_path = Path(_env("SECCAM_MODEL_PATH", str(repo_root / "models" / "yolox_nano.onnx"))).resolve()
+    host = _env("SECCAM_HOST", "0.0.0.0")
+    https_port = _int("SECCAM_HTTPS_PORT", 8443, 1, 65535)
+    http_port = _int("SECCAM_HTTP_PORT", 8080, 1, 65535)
+    static_dir = Path(_env("SECCAM_STATIC_DIR", str(repo_root / "static"))).resolve()
 
-    # Model path default relative to repo root (parent of server/)
-    repo_root = Path(__file__).resolve().parent.parent
-    model_path = Path(os.getenv("SECCAM_MODEL_PATH", str(repo_root / "models" / "yolox_nano.onnx"))).resolve()
+    proxies = []
+    for item in _env("SECCAM_TRUSTED_PROXIES").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            proxies.append(str(ipaddress.ip_network(item, strict=False)))
+        except ValueError:
+            raise ValueError(f"SECCAM_TRUSTED_PROXIES: invalid IP or CIDR: {item}") from None
 
-    # Network
-    host = os.getenv("SECCAM_HOST", "0.0.0.0")
-    https_port = int(os.getenv("SECCAM_HTTPS_PORT", "8443"))
-    http_port = int(os.getenv("SECCAM_HTTP_PORT", "8080"))
+    public_origin = _env("SECCAM_PUBLIC_ORIGIN")
+    if public_origin:
+        public_origin = public_origin.rstrip("/")
+        if not _ORIGIN_RE.match(public_origin):
+            raise ValueError("SECCAM_PUBLIC_ORIGIN: must look like https://host[:port]")
 
-    # Certs
-    cert = os.getenv("SECCAM_CERT", "")
-    key = os.getenv("SECCAM_KEY", "")
-    ca_cert = os.getenv("SECCAM_CA_CERT", "")
-
-    # Static dir
-    static_dir = Path(os.getenv("SECCAM_STATIC_DIR", str(repo_root / "static"))).resolve()
+    update_repo = _env("SECCAM_UPDATE_REPO", "fr3e1/seccam")
+    if not _REPO_RE.match(update_repo):
+        raise ValueError("SECCAM_UPDATE_REPO: must look like owner/name")
 
     return Config(
-        pin=pin,
         secret=secret,
         data_dir=data_dir,
         retention_days=retention_days,
@@ -68,8 +107,15 @@ def load_config() -> Config:
         host=host,
         https_port=https_port,
         http_port=http_port,
-        cert=cert,
-        key=key,
-        ca_cert=ca_cert,
+        cert=_env("SECCAM_CERT"),
+        key=_env("SECCAM_KEY"),
+        ca_cert=_env("SECCAM_CA_CERT"),
         static_dir=static_dir,
+        legacy_pin=_env("SECCAM_PIN"),
+        trusted_proxies=tuple(proxies),
+        public_origin=public_origin,
+        cookie_secure=_choice("SECCAM_COOKIE_SECURE", "auto", ("auto", "true", "false")),
+        update_mode=_choice("SECCAM_UPDATE_MODE", "off", ("off", "systemd")),
+        update_repo=update_repo,
+        session_ttl_days=_int("SECCAM_SESSION_TTL_DAYS", 30, 1, 365),
     )

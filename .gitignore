@@ -36,3 +36,4 @@ htmlcov/
 *.key
 *.pem
 !deploy/gen-certs.sh
+.claude/

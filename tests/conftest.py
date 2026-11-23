@@ -1,108 +1,98 @@
-import os
-import tempfile
+import json
+from io import BytesIO
 from pathlib import Path
-from typing import Generator
 
 import pytest
-from fastapi.testclient import TestClient
 from PIL import Image
 
-from server.config import load_config, Config
-from server.app import create_app
-from server.auth import make_token, derive_token_secret
+from server.config import Config, load_config
+from server.db import DB
+
+REPO = Path(__file__).resolve().parent.parent
+SHAPES = json.loads((Path(__file__).parent / "contract_shapes.json").read_text())
+
+# Keys that may be null in addition to the example's own type (§6.3 "|null").
+NULLABLE_KEYS = {"snapshot_url", "thumb_url", "device_id", "last_seen_at", "last_ip",
+                 "latest", "checked_at", "error", "version", "previous_version", "updated_at"}
 
 
-@pytest.fixture(scope="session")
-def tmp_data_dir(tmp_path_factory) -> Path:
-    return tmp_path_factory.mktemp("data")
+def _type_ok(example, value) -> bool:
+    if example is None:
+        return True
+    if isinstance(example, bool):
+        return isinstance(value, bool)
+    if isinstance(example, int):
+        return isinstance(value, int) and not isinstance(value, bool)
+    if isinstance(example, float):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if isinstance(example, str):
+        return isinstance(value, str)
+    if isinstance(example, list):
+        return isinstance(value, list)
+    if isinstance(example, dict):
+        return isinstance(value, dict)
+    return False
 
 
-@pytest.fixture(scope="session")
-def tmp_model_path(tmp_path_factory) -> Path:
-    return tmp_path_factory.mktemp("models") / "none.onnx"
+def _check(path: str, example: dict, obj: dict, depth: int) -> None:
+    assert isinstance(obj, dict), f"{path}: expected object, got {type(obj).__name__}"
+    assert set(obj) == set(example), f"{path}: keys {sorted(obj)} != {sorted(example)}"
+    for key, ex in example.items():
+        val = obj[key]
+        if val is None:
+            assert ex is None or key in NULLABLE_KEYS, f"{path}.{key}: unexpected null"
+            continue
+        assert _type_ok(ex, val), f"{path}.{key}: {type(val).__name__} does not match {type(ex).__name__}"
+        if depth < 1:
+            if isinstance(ex, dict):
+                _check(f"{path}.{key}", ex, val, depth + 1)
+            elif isinstance(ex, list) and ex and isinstance(ex[0], dict):
+                for i, item in enumerate(val):
+                    _check(f"{path}.{key}[{i}]", ex[0], item, depth + 1)
+
+
+def assert_shape(name: str, obj: dict) -> None:
+    """Assert obj has exactly the key set and value types of SHAPES[name] (nested one level)."""
+    _check(name, SHAPES[name], obj, 0)
 
 
 @pytest.fixture
-def cfg(tmp_data_dir: Path, tmp_model_path: Path, monkeypatch: pytest.MonkeyPatch) -> Config:
-    monkeypatch.setenv("SECCAM_DATA_DIR", str(tmp_data_dir))
-    monkeypatch.setenv("SECCAM_PIN", "1234")
+def data_dir(tmp_path: Path) -> Path:
+    path = tmp_path / "data"
+    path.mkdir()
+    return path
+
+
+@pytest.fixture
+def model_path(tmp_path: Path) -> Path:
+    return tmp_path / "models" / "none.onnx"
+
+
+@pytest.fixture
+def env(monkeypatch: pytest.MonkeyPatch, data_dir: Path, model_path: Path) -> None:
+    monkeypatch.setenv("SECCAM_DATA_DIR", str(data_dir))
     monkeypatch.setenv("SECCAM_SECRET", "test-secret-key")
-    monkeypatch.setenv("SECCAM_MODEL_PATH", str(tmp_model_path))
-    monkeypatch.setenv("SECCAM_RETENTION_DAYS", "14")
-    monkeypatch.setenv("SECCAM_HOST", "0.0.0.0")
-    monkeypatch.setenv("SECCAM_HTTPS_PORT", "8443")
-    monkeypatch.setenv("SECCAM_HTTP_PORT", "8080")
-    monkeypatch.setenv("SECCAM_CERT", "")
-    monkeypatch.setenv("SECCAM_KEY", "")
-    monkeypatch.setenv("SECCAM_CA_CERT", "")
-    monkeypatch.setenv("SECCAM_STATIC_DIR", str(Path(__file__).parent.parent / "static"))
+    monkeypatch.setenv("SECCAM_MODEL_PATH", str(model_path))
+    monkeypatch.setenv("SECCAM_STATIC_DIR", str(REPO / "static"))
+    monkeypatch.setenv("SECCAM_UPDATE_MODE", "off")
+    for name in ("SECCAM_PIN", "SECCAM_TRUSTED_PROXIES", "SECCAM_PUBLIC_ORIGIN", "SECCAM_COOKIE_SECURE"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def cfg(env) -> Config:
     return load_config()
 
 
 @pytest.fixture
-def client(cfg: Config) -> Generator[TestClient, None, None]:
-    app = create_app(cfg)
-    with TestClient(app, raise_server_exceptions=False) as c:
-        yield c
-
-
-@pytest.fixture
-def authed_client(client: TestClient, cfg: Config) -> TestClient:
-    # Login and get cookie
-    resp = client.post("/api/login", json={"pin": "1234"})
-    assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
-    # Cookie is already set in client.cookies
-    return client
+def db(cfg: Config) -> DB:
+    return DB(cfg.data_dir)
 
 
 @pytest.fixture
 def make_jpeg():
     def _make_jpeg(w: int = 640, h: int = 480, color: tuple = (128, 128, 128)) -> bytes:
-        img = Image.new("RGB", (w, h), color)
-        from io import BytesIO
         buf = BytesIO()
-        img.save(buf, format="JPEG", quality=80)
+        Image.new("RGB", (w, h), color).save(buf, format="JPEG", quality=80)
         return buf.getvalue()
     return _make_jpeg
-
-
-@pytest.fixture
-def auth_cookie(cfg: Config) -> str:
-    """Create a valid auth cookie value for websocket testing using derived token secret."""
-    # In test config, SECCAM_PIN=1234 is set and no DB auth exists yet
-    pin_component = cfg.pin
-    token_secret = derive_token_secret(cfg.secret, pin_component)
-    return make_token(token_secret, ttl_s=30 * 86400)
-
-
-@pytest.fixture
-def setup_data_dir(tmp_path_factory) -> Path:
-    """Fresh data directory for setup mode tests (no SECCAM_PIN in env)."""
-    return tmp_path_factory.mktemp("setup_data")
-
-
-@pytest.fixture
-def setup_cfg(setup_data_dir: Path, tmp_model_path: Path, monkeypatch: pytest.MonkeyPatch) -> Config:
-    """Config with SECCAM_PIN removed from environment."""
-    monkeypatch.setenv("SECCAM_DATA_DIR", str(setup_data_dir))
-    monkeypatch.delenv("SECCAM_PIN", raising=False)
-    monkeypatch.setenv("SECCAM_SECRET", "test-secret-key")
-    monkeypatch.setenv("SECCAM_MODEL_PATH", str(tmp_model_path))
-    monkeypatch.setenv("SECCAM_RETENTION_DAYS", "14")
-    monkeypatch.setenv("SECCAM_HOST", "0.0.0.0")
-    monkeypatch.setenv("SECCAM_HTTPS_PORT", "8443")
-    monkeypatch.setenv("SECCAM_HTTP_PORT", "8080")
-    monkeypatch.setenv("SECCAM_CERT", "")
-    monkeypatch.setenv("SECCAM_KEY", "")
-    monkeypatch.setenv("SECCAM_CA_CERT", "")
-    monkeypatch.setenv("SECCAM_STATIC_DIR", str(Path(__file__).parent.parent / "static"))
-    return load_config()
-
-
-@pytest.fixture
-def setup_client(setup_cfg: Config) -> Generator[TestClient, None, None]:
-    """Test client in setup mode (no PIN configured)."""
-    app = create_app(setup_cfg)
-    with TestClient(app, raise_server_exceptions=False) as c:
-        yield c

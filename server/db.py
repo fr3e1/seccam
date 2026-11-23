@@ -1,5 +1,6 @@
 import io
 import json
+import math
 import logging
 import sqlite3
 import threading
@@ -33,7 +34,46 @@ DEFAULT_SETTINGS = {
     "detect_fps": 2,
     "mode": "auto",
     "retention_days": 14,
+    "theme": "tokyo-night",
+    "jpeg_quality": 0.7,
+    "capture_width": 960,
 }
+
+THEME_IDS = [
+    "dracula", "nord", "gruvbox-dark", "tokyo-night",
+    "catppuccin-mocha", "solarized-dark", "solarized-light", "one-dark",
+]
+
+SCHEMA_VERSION = 2
+MAX_IMAGE_SIDE = 4096
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+_USER_COLS = ("id, username, password_hash, totp_secret, totp_enabled, totp_last_step, "
+              "recovery_codes, created_at, password_changed_at")
+_SESSION_COLS = "id, user_id, csrf, created_at, last_seen_at, expires_at, ip, user_agent"
+_DEVICE_COLS = "id, name, kind, created_at, last_seen_at, last_ip"
+
+
+def _user_row(row) -> Dict[str, Any]:
+    return {
+        "id": row[0], "username": row[1], "password_hash": row[2], "totp_secret": row[3],
+        "totp_enabled": bool(row[4]), "totp_last_step": row[5],
+        "recovery_codes": json.loads(row[6]), "created_at": row[7], "password_changed_at": row[8],
+    }
+
+
+def _session_row(row) -> Dict[str, Any]:
+    keys = ("id", "user_id", "csrf", "created_at", "last_seen_at", "expires_at", "ip", "user_agent")
+    return dict(zip(keys, row))
+
+
+def _device_row(row) -> Dict[str, Any]:
+    keys = ("id", "name", "kind", "created_at", "last_seen_at", "last_ip")
+    return dict(zip(keys, row))
 
 
 class DB:
@@ -50,6 +90,7 @@ class DB:
         )
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -73,7 +114,41 @@ class DB:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    password_hash TEXT NOT NULL,
+                    totp_secret TEXT,
+                    totp_enabled INTEGER NOT NULL DEFAULT 0,
+                    totp_last_step INTEGER NOT NULL DEFAULT 0,
+                    recovery_codes TEXT NOT NULL DEFAULT '[]',
+                    created_at INTEGER NOT NULL,
+                    password_changed_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    csrf TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    last_seen_at INTEGER NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    ip TEXT,
+                    user_agent TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+                CREATE TABLE IF NOT EXISTS devices (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    kind TEXT NOT NULL CHECK (kind IN ('browser','agent')),
+                    token_hash TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    last_seen_at INTEGER,
+                    last_ip TEXT
+                );
             """)
+            version = self._conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < SCHEMA_VERSION:
+                self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def get_settings(self) -> Dict[str, Any]:
         with self._lock:
@@ -86,24 +161,25 @@ class DB:
                 return merged
             return DEFAULT_SETTINGS.copy()
 
-    def update_settings(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_settings(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate a partial settings patch without storing it; returns the full merged settings."""
+        patch = dict(patch)
         current = self.get_settings()
-        # Validate
         if "min_score" in patch:
             v = patch["min_score"]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0.1 or v > 0.95:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0.1 or v > 0.95:
                 raise ValueError("min_score must be between 0.1 and 0.95")
         if "cooldown_s" in patch:
             v = patch["cooldown_s"]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0 or v > 3600:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 or v > 3600:
                 raise ValueError("cooldown_s must be between 0 and 3600")
         if "preview_fps" in patch:
             v = patch["preview_fps"]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0.2 or v > 10:
-                raise ValueError("preview_fps must be between 0.2 and 10")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0.2 or v > 15:
+                raise ValueError("preview_fps must be between 0.2 and 15")
         if "detect_fps" in patch:
             v = patch["detect_fps"]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0.2 or v > 10:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0.2 or v > 10:
                 raise ValueError("detect_fps must be between 0.2 and 10")
         if "retention_days" in patch:
             v = patch["retention_days"]
@@ -113,6 +189,16 @@ class DB:
             v = patch["mode"]
             if v not in ("auto", "local", "server"):
                 raise ValueError("mode must be one of: auto, local, server")
+        if "theme" in patch and patch["theme"] not in THEME_IDS:
+            raise ValueError(f"theme must be one of: {', '.join(THEME_IDS)}")
+        if "jpeg_quality" in patch:
+            v = patch["jpeg_quality"]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0.3 or v > 0.95:
+                raise ValueError("jpeg_quality must be between 0.3 and 0.95")
+        if "capture_width" in patch:
+            v = patch["capture_width"]
+            if isinstance(v, bool) or not isinstance(v, int) or v < 320 or v > 1920:
+                raise ValueError("capture_width must be between 320 and 1920")
         if "labels" in patch:
             v = patch["labels"]
             if not isinstance(v, list):
@@ -134,7 +220,10 @@ class DB:
 
         new_settings = current.copy()
         new_settings.update(patch)
+        return new_settings
 
+    def update_settings(self, patch: Dict[str, Any]) -> Dict[str, Any]:
+        new_settings = self.validate_settings(patch)
         with self._lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO settings (key, value) VALUES ('settings', ?)",
@@ -156,6 +245,191 @@ class DB:
                 "INSERT OR REPLACE INTO settings (key, value) VALUES ('auth', ?)",
                 (json.dumps(rec),),
             )
+
+    def delete_legacy_auth(self) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM settings WHERE key = 'auth'")
+
+    # ---- users ----
+    def count_users(self) -> int:
+        with self._lock:
+            return self._conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    def create_user(self, username: str, password_hash: str) -> Dict[str, Any]:
+        username = username.strip()
+        now = _now_ms()
+        with self._lock:
+            try:
+                cur = self._conn.execute(
+                    "INSERT INTO users (username, password_hash, created_at, password_changed_at) VALUES (?, ?, ?, ?)",
+                    (username, password_hash, now, now),
+                )
+            except sqlite3.IntegrityError:
+                raise ValueError("username taken") from None
+            row = self._conn.execute(f"SELECT {_USER_COLS} FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return _user_row(row)
+
+    def create_first_user(self, username: str, password_hash: str) -> Optional[Dict[str, Any]]:
+        username = username.strip()
+        now = _now_ms()
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO users (username, password_hash, created_at, password_changed_at) "
+                "SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)",
+                (username, password_hash, now, now),
+            )
+            if cur.rowcount != 1:
+                return None
+            row = self._conn.execute(f"SELECT {_USER_COLS} FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return _user_row(row)
+
+    def consume_totp_step(self, user_id: int, step: int) -> bool:
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?",
+                (step, user_id, step),
+            )
+            return cur.rowcount == 1
+
+    def replace_recovery_codes(self, user_id: int, expected: List[str], new: List[str]) -> bool:
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE users SET recovery_codes = ? WHERE id = ? AND recovery_codes = ?",
+                (json.dumps(new), user_id, json.dumps(expected)),
+            )
+            return cur.rowcount == 1
+
+    def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(f"SELECT {_USER_COLS} FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _user_row(row) if row else None
+
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT {_USER_COLS} FROM users WHERE username = ?", (username.strip(),)
+            ).fetchone()
+        return _user_row(row) if row else None
+
+    def update_user(self, user_id: int, **fields: Any) -> None:
+        allowed = {"password_hash", "totp_secret", "totp_enabled", "totp_last_step",
+                   "recovery_codes", "password_changed_at"}
+        bad = set(fields) - allowed
+        if bad:
+            raise ValueError(f"unknown user fields: {', '.join(sorted(bad))}")
+        if not fields:
+            return
+        values = []
+        for key, val in fields.items():
+            if key == "totp_enabled":
+                val = 1 if val else 0
+            elif key == "recovery_codes":
+                val = json.dumps(list(val))
+            values.append(val)
+        assignments = ", ".join(f"{k} = ?" for k in fields)
+        with self._lock:
+            self._conn.execute(f"UPDATE users SET {assignments} WHERE id = ?", (*values, user_id))
+
+    # ---- sessions ----
+    def create_session(self, sid_hash: str, user_id: int, csrf: str, expires_at: int,
+                       ip: Optional[str], user_agent: Optional[str]) -> None:
+        now = _now_ms()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO sessions (id, user_id, csrf, created_at, last_seen_at, expires_at, ip, user_agent) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (sid_hash, user_id, csrf, now, now, expires_at, ip, user_agent),
+            )
+
+    def get_session(self, sid_hash: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(f"SELECT {_SESSION_COLS} FROM sessions WHERE id = ?", (sid_hash,)).fetchone()
+        return _session_row(row) if row else None
+
+    def touch_session(self, sid_hash: str, now: int) -> None:
+        with self._lock:
+            self._conn.execute("UPDATE sessions SET last_seen_at = ? WHERE id = ?", (now, sid_hash))
+
+    def delete_session(self, sid_hash: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM sessions WHERE id = ?", (sid_hash,))
+
+    def delete_user_sessions(self, user_id: int, except_id: Optional[str] = None) -> int:
+        with self._lock:
+            if except_id is None:
+                cur = self._conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            else:
+                cur = self._conn.execute(
+                    "DELETE FROM sessions WHERE user_id = ? AND id != ?", (user_id, except_id)
+                )
+            return cur.rowcount
+
+    def list_session_ids(self, user_id: int) -> List[str]:
+        with self._lock:
+            rows = self._conn.execute("SELECT id FROM sessions WHERE user_id = ?", (user_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def purge_expired_sessions(self, now: int, idle_ms: int = 7 * 86400 * 1000) -> int:
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM sessions WHERE expires_at <= ? OR last_seen_at <= ?", (now, now - idle_ms)
+            )
+            return cur.rowcount
+
+    # ---- devices ----
+    def create_device(self, device_id: str, name: str, kind: str, token_hash: str) -> Dict[str, Any]:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO devices (id, name, kind, token_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+                (device_id, name.strip(), kind, token_hash, _now_ms()),
+            )
+            row = self._conn.execute(f"SELECT {_DEVICE_COLS} FROM devices WHERE id = ?", (device_id,)).fetchone()
+        return _device_row(row)
+
+    def get_device(self, device_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT {_DEVICE_COLS}, token_hash FROM devices WHERE id = ?", (device_id,)
+            ).fetchone()
+        if not row:
+            return None
+        dev = _device_row(row[:6])
+        dev["token_hash"] = row[6]
+        return dev
+
+    def list_devices(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT {_DEVICE_COLS} FROM devices ORDER BY created_at ASC, rowid ASC"
+            ).fetchall()
+        return [_device_row(r) for r in rows]
+
+    def rename_device(self, device_id: str, name: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            cur = self._conn.execute("UPDATE devices SET name = ? WHERE id = ?", (name.strip(), device_id))
+            if cur.rowcount != 1:
+                return None
+            row = self._conn.execute(f"SELECT {_DEVICE_COLS} FROM devices WHERE id = ?", (device_id,)).fetchone()
+        return _device_row(row)
+
+    def delete_device(self, device_id: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+            return cur.rowcount == 1
+
+    def touch_device(self, device_id: str, now: int, ip: Optional[str]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE devices SET last_seen_at = ?, last_ip = ? WHERE id = ?", (now, ip, device_id)
+            )
+
+    def backup_to(self, dest: Path) -> None:
+        target = sqlite3.connect(str(dest))
+        try:
+            with self._lock:
+                self._conn.backup(target)
+        finally:
+            target.close()
 
     def add_event(
         self,
@@ -247,6 +521,8 @@ class DB:
 
         # Load image
         img = Image.open(io.BytesIO(jpeg))
+        if max(img.size) > MAX_IMAGE_SIDE:
+            raise ValueError("image too large")
         img.load()  # force load to catch errors early
         if img.mode != "RGB":
             img = img.convert("RGB")

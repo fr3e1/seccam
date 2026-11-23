@@ -5,15 +5,15 @@
 ```bash
 git clone https://github.com/fr3e1/seccam.git
 cd seccam
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-pytest -q
+uv venv --python 3.12 .venv
+uv pip install --python .venv/bin/python -r requirements-dev.txt
+.venv/bin/python -m pytest -q --timeout 60
+node --test tests/js/*.test.mjs
 ```
 
 ## Guidelines
 
-- All tests must pass (`pytest -q --timeout 30`)
+- All tests must pass (pytest and the node tests, see above)
 - Keep dependencies minimal: no new Python packages without strong justification
 - Frontend: vanilla ES2020 only — no frameworks, no CDNs, everything served locally
 - Follow existing code style (type hints, dataclasses, async/await)

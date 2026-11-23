@@ -1,11 +1,12 @@
 import json
+import sqlite3
 import time
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from server.db import DB, DEFAULT_SETTINGS, ALL_LABELS
+from server.db import DB, DEFAULT_SETTINGS, THEME_IDS
 
 
 class TestDB:
@@ -23,6 +24,9 @@ class TestDB:
         assert settings["detect_fps"] == 2
         assert settings["mode"] == "auto"
         assert settings["retention_days"] == 14
+        assert settings["theme"] == "tokyo-night"
+        assert settings["jpeg_quality"] == 0.7
+        assert settings["capture_width"] == 960
 
     def test_update_settings_valid(self, db: DB):
         new_settings = db.update_settings({"min_score": 0.7, "labels": ["person", "car"]})
@@ -49,8 +53,9 @@ class TestDB:
     def test_update_settings_invalid_fps(self, db: DB):
         with pytest.raises(ValueError, match="preview_fps"):
             db.update_settings({"preview_fps": 0.1})
+        assert db.update_settings({"preview_fps": 15})["preview_fps"] == 15
         with pytest.raises(ValueError, match="preview_fps"):
-            db.update_settings({"preview_fps": 11})
+            db.update_settings({"preview_fps": 16})
         with pytest.raises(ValueError, match="detect_fps"):
             db.update_settings({"detect_fps": 0.1})
         with pytest.raises(ValueError, match="detect_fps"):
@@ -74,6 +79,45 @@ class TestDB:
     def test_update_settings_invalid_mode(self, db: DB):
         with pytest.raises(ValueError, match="mode"):
             db.update_settings({"mode": "invalid"})
+
+    def test_update_settings_new_keys(self, db: DB):
+        for tid in THEME_IDS:
+            assert db.update_settings({"theme": tid})["theme"] == tid
+        with pytest.raises(ValueError, match="theme"):
+            db.update_settings({"theme": "neon"})
+        for bad in (0.29, 0.96, True, "0.5"):
+            with pytest.raises(ValueError, match="jpeg_quality"):
+                db.update_settings({"jpeg_quality": bad})
+        assert db.update_settings({"jpeg_quality": 0.3})["jpeg_quality"] == 0.3
+        for bad in (319, 1921, True, 640.5):
+            with pytest.raises(ValueError, match="capture_width"):
+                db.update_settings({"capture_width": bad})
+        assert db.update_settings({"capture_width": 1920})["capture_width"] == 1920
+
+    def test_non_finite_numbers_rejected(self, db: DB):
+        for key in ("min_score", "cooldown_s", "preview_fps", "detect_fps", "jpeg_quality"):
+            for bad in (float("nan"), float("inf"), float("-inf")):
+                with pytest.raises(ValueError, match=key):
+                    db.update_settings({key: bad})
+        assert db.get_settings() == DEFAULT_SETTINGS
+
+    def test_validate_settings_no_side_effects(self, db: DB):
+        patch = {"labels": ["car", "person"], "min_score": 0.8}
+        merged = db.validate_settings(patch)
+        assert merged["min_score"] == 0.8 and merged["labels"] == ["person", "car"]
+        assert patch["labels"] == ["car", "person"]
+        assert db.get_settings() == DEFAULT_SETTINGS
+        with pytest.raises(ValueError):
+            db.validate_settings({"min_score": float("nan")})
+
+    def test_oversized_image_skipped(self, db: DB, make_jpeg):
+        ev = db.add_event(1, "c", "C", [], 5000, 100, make_jpeg(5000, 100))
+        assert ev["snapshot_url"] is None and ev["thumb_url"] is None
+        assert db.get_event(ev["id"])["snapshot_url"] is None
+
+    def test_update_settings_unknown_key(self, db: DB):
+        with pytest.raises(ValueError, match="unknown"):
+            db.update_settings({"bogus": 1})
 
     def test_add_event_with_jpeg(self, db: DB, make_jpeg):
         jpeg = make_jpeg(640, 480)
@@ -245,3 +289,168 @@ class TestDB:
         assert stats["events_total"] == 1
         assert stats["events_24h"] == 1
         assert stats["disk_bytes"] > 0
+
+
+def test_migrates_v1_db(tmp_path: Path):
+    conn = sqlite3.connect(tmp_path / "seccam.db")
+    conn.executescript("""
+        CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, camera_id TEXT NOT NULL,
+            camera_name TEXT NOT NULL, labels TEXT NOT NULL, max_score REAL NOT NULL, detections TEXT NOT NULL,
+            frame_w INTEGER NOT NULL, frame_h INTEGER NOT NULL, snapshot TEXT, thumb TEXT);
+        CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO events (ts, camera_id, camera_name, labels, max_score, detections, frame_w, frame_h)
+            VALUES (1000, 'c', 'Cam', '["person"]', 0.8, '[]', 640, 480);
+        INSERT INTO settings VALUES ('auth', '{"pin_hash": "x"}');
+        INSERT INTO settings VALUES ('settings', '{"min_score": 0.6}');
+    """)
+    conn.commit()
+    conn.close()
+    for _ in range(2):  # idempotent
+        db = DB(tmp_path)
+        assert db._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.get_event(1)["camera_name"] == "Cam"
+        assert db.get_auth() == {"pin_hash": "x"}
+        s = db.get_settings()
+        assert s["min_score"] == 0.6 and s["theme"] == "tokyo-night" and s["capture_width"] == 960
+        assert db.count_users() == 0
+    db.delete_legacy_auth()
+    assert db.get_auth() is None
+    assert db.get_settings()["min_score"] == 0.6
+
+
+class TestUsers:
+    def test_create_and_lookup(self, db: DB):
+        u = db.create_user("  Alice ", "h1")
+        assert set(u) == {"id", "username", "password_hash", "totp_secret", "totp_enabled", "totp_last_step",
+                          "recovery_codes", "created_at", "password_changed_at"}
+        assert u["username"] == "Alice" and u["totp_enabled"] is False and u["recovery_codes"] == []
+        assert db.get_user(u["id"]) == u
+        assert db.get_user_by_username("ALICE")["id"] == u["id"]
+        assert db.get_user(999) is None and db.get_user_by_username("bob") is None
+        assert db.count_users() == 1
+        with pytest.raises(ValueError, match="username taken"):
+            db.create_user("alice", "h2")
+
+    def test_create_first_user_atomic(self, db: DB):
+        first = db.create_first_user("admin", "h")
+        assert first is not None and first["username"] == "admin"
+        assert db.create_first_user("other", "h") is None
+        assert db.count_users() == 1
+
+    def test_create_first_user_blocked_by_existing(self, db: DB):
+        db.create_user("a", "h")
+        assert db.create_first_user("b", "h") is None
+
+    def test_update_user(self, db: DB):
+        u = db.create_user("alice", "h")
+        db.update_user(u["id"], password_hash="h2", totp_secret="SEC", totp_enabled=True,
+                       totp_last_step=5, recovery_codes=["a", "b"], password_changed_at=42)
+        got = db.get_user(u["id"])
+        assert got["password_hash"] == "h2" and got["totp_secret"] == "SEC" and got["totp_enabled"] is True
+        assert got["totp_last_step"] == 5 and got["recovery_codes"] == ["a", "b"] and got["password_changed_at"] == 42
+        with pytest.raises(ValueError):
+            db.update_user(u["id"], username="x")
+
+    def test_consume_totp_step(self, db: DB):
+        u = db.create_user("alice", "h")
+        assert db.consume_totp_step(u["id"], 10) is True
+        assert db.consume_totp_step(u["id"], 10) is False
+        assert db.consume_totp_step(u["id"], 9) is False
+        assert db.consume_totp_step(u["id"], 11) is True
+        assert db.get_user(u["id"])["totp_last_step"] == 11
+
+    def test_replace_recovery_codes_cas(self, db: DB):
+        u = db.create_user("alice", "h")
+        db.update_user(u["id"], recovery_codes=["a", "b", "c"])
+        assert db.replace_recovery_codes(u["id"], ["a", "b", "c"], ["b", "c"]) is True
+        assert db.replace_recovery_codes(u["id"], ["a", "b", "c"], ["a"]) is False
+        assert db.get_user(u["id"])["recovery_codes"] == ["b", "c"]
+
+
+class TestSessions:
+    def test_lifecycle(self, db: DB):
+        u = db.create_user("alice", "h")
+        db.create_session("s1", u["id"], "csrf1", 10**13, "1.2.3.4", "UA")
+        s = db.get_session("s1")
+        assert set(s) == {"id", "user_id", "csrf", "created_at", "last_seen_at", "expires_at", "ip", "user_agent"}
+        assert s["csrf"] == "csrf1" and s["ip"] == "1.2.3.4" and s["user_agent"] == "UA"
+        db.touch_session("s1", 12345)
+        assert db.get_session("s1")["last_seen_at"] == 12345
+        db.delete_session("s1")
+        assert db.get_session("s1") is None and db.get_session("nope") is None
+
+    def test_delete_user_sessions_and_list(self, db: DB):
+        a, b = db.create_user("a1x", "h"), db.create_user("b1x", "h")
+        for sid, uid in (("s1", a["id"]), ("s2", a["id"]), ("s3", a["id"]), ("s4", b["id"])):
+            db.create_session(sid, uid, "c", 10**13, None, None)
+        assert sorted(db.list_session_ids(a["id"])) == ["s1", "s2", "s3"]
+        assert db.delete_user_sessions(a["id"], except_id="s1") == 2
+        assert db.list_session_ids(a["id"]) == ["s1"]
+        assert db.delete_user_sessions(a["id"]) == 1
+        assert db.list_session_ids(b["id"]) == ["s4"]
+
+    def test_purge_expired(self, db: DB):
+        u = db.create_user("alice", "h")
+        now = int(time.time() * 1000)
+        db.create_session("live", u["id"], "c", now + 100000, None, None)
+        db.create_session("expired", u["id"], "c", now - 1, None, None)
+        db.create_session("idle", u["id"], "c", now + 10**9, None, None)
+        db.touch_session("idle", now - 8 * 86400 * 1000)
+        assert db.purge_expired_sessions(now) == 2
+        assert db.list_session_ids(u["id"]) == ["live"]
+
+    def test_user_delete_cascades(self, db: DB):
+        u = db.create_user("alice", "h")
+        db.create_session("s1", u["id"], "c", 10**13, None, None)
+        db._conn.execute("DELETE FROM users WHERE id = ?", (u["id"],))
+        assert db.get_session("s1") is None
+
+    def test_session_requires_user(self, db: DB):
+        with pytest.raises(sqlite3.IntegrityError):
+            db.create_session("s1", 999, "c", 1, None, None)
+
+
+class TestDevices:
+    def test_crud(self, db: DB):
+        d = db.create_device("0123456789ab", " Garage ", "agent", "hash1")
+        assert d == {"id": "0123456789ab", "name": "Garage", "kind": "agent",
+                     "created_at": d["created_at"], "last_seen_at": None, "last_ip": None}
+        assert "token_hash" not in d
+        full = db.get_device("0123456789ab")
+        assert full["token_hash"] == "hash1" and full["name"] == "Garage"
+        assert db.get_device("ffffffffffff") is None
+        db.touch_device("0123456789ab", 777, "10.0.0.5")
+        got = db.get_device("0123456789ab")
+        assert got["last_seen_at"] == 777 and got["last_ip"] == "10.0.0.5"
+        assert db.rename_device("0123456789ab", " Porch ")["name"] == "Porch"
+        assert db.rename_device("ffffffffffff", "x") is None
+        assert db.delete_device("0123456789ab") is True
+        assert db.delete_device("0123456789ab") is False
+
+    def test_list_ordered_without_token_hash(self, db: DB):
+        db.create_device("aaaaaaaaaaaa", "one", "browser", "h")
+        db.create_device("bbbbbbbbbbbb", "two", "agent", "h")
+        devs = db.list_devices()
+        assert [d["id"] for d in devs] == ["aaaaaaaaaaaa", "bbbbbbbbbbbb"]
+        assert all("token_hash" not in d for d in devs)
+
+    def test_kind_check(self, db: DB):
+        with pytest.raises(sqlite3.IntegrityError):
+            db.create_device("cccccccccccc", "x", "toaster", "h")
+
+
+def test_backup_to(db: DB, tmp_path: Path):
+    db.create_user("alice", "h")
+    dest = tmp_path / "backup.db"
+    db.backup_to(dest)
+    conn = sqlite3.connect(dest)
+    assert conn.execute("SELECT username FROM users").fetchall() == [("alice",)]
+    conn.close()
+
+
+def test_contract_shapes(db: DB, make_jpeg):
+    from conftest import assert_shape
+    assert_shape("Settings", db.get_settings())
+    ev = db.add_event(1, "c", "C", [{"label": "person", "score": 0.9, "bbox": [0, 0, 5, 5]}], 640, 480, make_jpeg())
+    assert_shape("Event", ev)
+    assert_shape("Device", {**db.create_device("dddddddddddd", "d", "agent", "h"), "connected": False})
